@@ -23,6 +23,17 @@
   font-size: calc(10px + 2vmin);
   color: white;
 }
+.code-block {
+  background-color: #1e1e1e;
+  color: #d4d4d4;
+  padding: 16px;
+  border-radius: 8px;
+  font-family: 'Courier New', monospace;
+  text-align: left;
+  white-space: pre-wrap; /* Preserves line breaks */
+  width: 800px;
+}
+
 
 .App-link {
   color: #61dafb;

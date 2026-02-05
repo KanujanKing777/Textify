@@ -2,6 +2,9 @@
 
 /src/api.js
 /src/api.txt
+/src/utils/blogUtils.js
+/src/utils/imageUtils.js
+/src/utils/textUtils.js
 
 .env
 # dependencies

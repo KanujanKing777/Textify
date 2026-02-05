@@ -3,6 +3,9 @@ import React, { useState, useEffect } from 'react';
 import { formatText, generateText, generateBlog } from './api';
 import './Home.css';
 import { handleOpenInNewTab, handleConvertToPDF } from './HomeFun';
+import { generateBlogImages, formatBlogContent, downloadBlogImage } from './utils/blogUtils';
+import { generateImage, downloadImage } from './utils/imageUtils';
+import { handleCopy } from './utils/textUtils';
 
 function Home() {
   const [text, setText] = useState('');
@@ -61,205 +64,36 @@ function Home() {
     setLoading(false);
   };
 
-  const handleCopy = () => {
-    if (!output) return;
-    navigator.clipboard.writeText(output).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
+  const handleCopyText = () => {
+    handleCopy(output, setCopied);
   };
 
-  const handleGenerateImage = async () => {
-    if (!imagePrompt.trim()) {
-      setOutput('❌ Please enter an image prompt.');
-      return;
-    }
-    setImageLoading(true);
-    try {
-      const encodedPrompt = encodeURIComponent(imagePrompt.trim());
-      const params = new URLSearchParams({
-        model: imageModel,
-        width: '1024',
-        height: '1024',
-        seed: '0',
-        enhance: 'false',
-        negative_prompt: 'worst quality, blurry',
-        private: 'true',
-        nologo: 'false',
-        nofeed: 'false',
-        safe: 'false',
-        quality: 'medium',
-        image: '',
-        transparent: 'false',
-        guidance_scale: '1'
-      });
-      const imageUrl = `https://gen.pollinations.ai/image/${encodedPrompt}?${params.toString()}&key=${encodeURIComponent("sk_JnVq787jGJsEXLWLKMZoZsm82ejmdZKn")}`;
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        setGeneratedImage(imageUrl);
-        setOutput('✅ Image generated successfully!');
-        setImageLoading(false);
-      };
-      img.onerror = () => {
-        setOutput('❌ Failed to generate image.');
-        setImageLoading(false);
-      };
-      img.src = imageUrl;
-    } catch (err) {
-      setOutput('❌ Error generating image.');
-      console.error(err);
-      setImageLoading(false);
-    }
+  const handleGenerateImageCall = async () => {
+    await generateImage(imagePrompt, imageModel, setGeneratedImage, setOutput, setImageLoading);
   };
 
-  const handleDownloadImage = async () => {
-    if (!generatedImage) return;
-    try {
-      const response = await fetch(generatedImage);
-      if (!response.ok) throw new Error('Failed to fetch image.');
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `generated-image-${Date.now()}.png`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      setOutput('✅ Image downloaded!');
-    } catch (err) {
-      console.error(err);
-      setOutput('❌ Failed to download image.');
-    }
+  const handleDownloadImageCall = async () => {
+    await downloadImage(generatedImage, setOutput);
   };
 
-  const handleDownloadBlogImage = async (imageUrl, index) => {
-    try {
-      const response = await fetch(imageUrl);
-      if (!response.ok) throw new Error('Failed to fetch image.');
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `blog-image-${index + 1}-${Date.now()}.png`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error(err);
-      alert('❌ Failed to download image.');
-    }
+  const handleDownloadBlogImageCall = async (imageUrl, index) => {
+    await downloadBlogImage(imageUrl, index);
   };
 
-  const handleGenerateBlog = async () => {
+  const handleGenerateBlogCall = async () => {
     if (!blogTopic.trim()) {
       setOutput('❌ Please enter a blog topic.');
       return;
     }
     setBlogLoading(true);
-    setBlogImages([]); // Clear previous images
-    setBlogImagesLoading([]); // Clear loading states
+    setBlogImages([]);
+    setBlogImagesLoading([]);
     try {
       const result = await generateBlog(blogTopic, blogLength, blogStyle);
-      // result is now an object with { content, images }
       setOutput(result.content || '');
       
-      // Generate images for each image prompt
       if (result.images && result.images.length > 0) {
-        // Initialize loading states for each image
-        setBlogImagesLoading(new Array(result.images.length).fill(true));
-        const modelsToTry = ['nanobanana-pro', 'nanobanana', 'gptimage', 'zimage'];
-        const generatedImages = [];
-        
-        result.images.forEach((prompt, promptIndex) => {
-          (async () => {
-            let imageUrl = null;
-            
-            // Try each model in order
-            for (const model of modelsToTry) {
-              try {
-                const encodedPrompt = encodeURIComponent(prompt.trim());
-                const params = new URLSearchParams({
-                  model: model,
-                  width: '1024',
-                  height: '1024',
-                  seed: '0',
-                  enhance: 'false',
-                  negative_prompt: 'worst quality, blurry',
-                  private: 'true',
-                  nologo: 'false',
-                  nofeed: 'false',
-                  safe: 'false',
-                  quality: 'medium',
-                  image: '',
-                  transparent: 'false',
-                  guidance_scale: '1'
-                });
-                const testUrl = `https://gen.pollinations.ai/image/${encodedPrompt}?${params.toString()}&key=${encodeURIComponent("sk_JnVq787jGJsEXLWLKMZoZsm82ejmdZKn")}`;
-                
-                // Test if the image URL is accessible using Image object (like in handleGenerateImage)
-                const testImage = new Image();
-                testImage.crossOrigin = 'anonymous';
-                
-                // Use Promise to handle image load/error
-                // eslint-disable-next-line no-loop-func
-                const imageLoadPromise = new Promise((resolve) => {
-                  testImage.onload = () => {
-                    imageUrl = testUrl;
-                    console.log(`Successfully generated image with model: ${model}`);
-                    resolve(true);
-                  };
-                  testImage.onerror = () => {
-                    console.log(`Model ${model} failed for prompt, trying next...`);
-                    resolve(false);
-                  };
-                  testImage.src = testUrl;
-                });
-                
-                if (await imageLoadPromise) {
-                  break; // Success, use this model
-                }
-              } catch (modelErr) {
-                console.log(`Model ${model} failed for prompt, trying next...`);
-                continue; // Try next model
-              }
-            }
-            console.log('Final image URL for prompt:', imageUrl);
-            
-            // If we found a working image URL, add it and update loading state
-            if (imageUrl) {
-              generatedImages[promptIndex] = {
-                url: imageUrl,
-                prompt: prompt
-              };
-              // Update loading state - mark this image as not loading
-              setBlogImagesLoading((prev) => {
-                const updated = [...prev];
-                updated[promptIndex] = false;
-                return updated;
-              });
-              // Update images list to show the newly loaded image
-              setBlogImages((prev) => {
-                const updated = [...prev];
-                updated[promptIndex] = {
-                  url: imageUrl,
-                  prompt: prompt
-                };
-                return updated;
-              });
-            } else {
-              console.error('Failed to generate image for prompt:', prompt);
-              // Mark as not loading even if failed
-              setBlogImagesLoading((prev) => {
-                const updated = [...prev];
-                updated[promptIndex] = false;
-                return updated;
-              });
-            }
-          })();
-        });
+        generateBlogImages(result.images, setBlogImages, setBlogImagesLoading);
       }
     } catch (err) {
       setOutput('❌ Error generating blog.');
@@ -269,106 +103,8 @@ function Home() {
   };
 
   // Function to format blog content with markdown-like syntax
-  const formatBlogContent = (text) => {
-    if (!text) return null;
-    
-    // Split text into lines
-    const lines = text.split('\n');
-    
-    return lines.map((line, index) => {
-      // Handle [Image: N] placeholders
-      const imageMatch = line.match(/\[Image:\s*(\d+)\]/i);
-      if (imageMatch) {
-        const imageNum = parseInt(imageMatch[1]) - 1; // Convert to 0-based index
-        if (blogImages[imageNum] && blogImages[imageNum].url) {
-          return (
-            <div key={index} style={{ margin: '16px 0', textAlign: 'center' }}>
-              <img 
-                src={blogImages[imageNum].url} 
-                alt={`Image ${imageNum + 1}`}
-                style={{ 
-                  maxWidth: '100%', 
-                  height: 'auto', 
-                  borderRadius: '8px',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  maxHeight: '400px'
-                }} 
-              />
-              <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: 'rgba(230,238,252,0.6)' }}>
-                Image {imageNum + 1}
-              </p>
-            </div>
-          );
-        } else {
-          // Image not yet loaded or doesn't exist
-          return (
-            <div key={index} style={{ margin: '16px 0', padding: '20px', textAlign: 'center', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '8px', border: '1px dashed rgba(255,255,255,0.2)' }}>
-              <p style={{ margin: 0, color: 'rgba(230,238,252,0.6)', fontSize: '12px' }}>
-                Image {imageNum + 1} loading...
-              </p>
-            </div>
-          );
-        }
-      }
-      // Handle ### (bold headings)
-      else if (line.startsWith('###')) {
-        const content = line.replace(/^###\s*/, '');
-        return (
-          <div key={index} style={{ fontWeight: 'bold', fontSize: '16px', marginBottom: '8px', color: '#e6eefc' }}>
-            {content}
-          </div>
-        );
-      }
-      // Handle ## (larger bold headings)
-      else if (line.startsWith('##')) {
-        const content = line.replace(/^##\s*/, '');
-        return (
-          <div key={index} style={{ fontWeight: 'bold', fontSize: '18px', marginBottom: '12px', color: '#e6eefc', marginTop: '12px' }}>
-            {content}
-          </div>
-        );
-      }
-      // Handle # (largest bold headings)
-      else if (line.startsWith('#')) {
-        const content = line.replace(/^#\s*/, '');
-        return (
-          <div key={index} style={{ fontWeight: 'bold', fontSize: '20px', marginBottom: '12px', color: '#e6eefc', marginTop: '16px' }}>
-            {content}
-          </div>
-        );
-      }
-      // Handle **text** and *text* (bold)
-      else if (line.includes('**') || line.includes('*')) {
-        const parts = line.split(/(\*\*.*?\*\*|\*[^*]+\*)/g);
-        return (
-          <p key={index} style={{ margin: '6px 0', color: 'rgba(230,238,252,0.95)' }}>
-            {parts.map((part, i) => {
-              if (part.startsWith('**') && part.endsWith('**')) {
-                // Double asterisk bold
-                return <strong key={i}>{part.slice(2, -2)}</strong>;
-              } else if (part.startsWith('*') && part.endsWith('*') && !part.startsWith('**')) {
-                // Single asterisk bold
-                return <strong key={i}>{part.slice(1, -1)}</strong>;
-              } else {
-                return part;
-              }
-            })}
-          </p>
-        );
-      }
-      // Regular paragraph
-      else if (line.trim()) {
-        return (
-          <p key={index} style={{ margin: '6px 0', color: 'rgba(230,238,252,0.95)', lineHeight: '1.6' }}>
-            {line}
-          </p>
-        );
-      }
-      // Empty line spacing
-      else {
-        return <div key={index} style={{ height: '8px' }} />;
-      }
-    });
+  const formatBlogContentCall = (text) => {
+    return formatBlogContent(text, blogImages);
   };
 
   return (
@@ -444,7 +180,7 @@ function Home() {
                 </div>
 
                 <div className="actions">
-                  <button onClick={handleGenerateBlog} className="btn" disabled={blogLoading}>
+                  <button onClick={handleGenerateBlogCall} className="btn" disabled={blogLoading}>
                     {blogLoading ? 'Generating…' : 'Generate'}
                   </button>
                 </div>
@@ -456,7 +192,7 @@ function Home() {
                       {output && (
                         <button
                           className="copyFloating"
-                          onClick={handleCopy}
+                          onClick={handleCopyText}
                           aria-label="Copy Content"
                           title="Copy blog content"
                           style={{ position: 'static', marginBottom: 0, flex: 'none' }}
@@ -517,7 +253,7 @@ function Home() {
                 </div>
                   <div id='blogcontent' style={{ margin: 0, color: 'rgba(230,238,252,0.95)', fontSize: '14px' }}>
                     {blogOutputFormat === 'WebPage' || blogOutputFormat === 'PDF' ? (
-                      formatBlogContent(output) || <p style={{ color: 'rgba(230,238,252,0.7)' }}>Your generated content will appear here.</p>
+                      formatBlogContentCall(output) || <p style={{ color: 'rgba(230,238,252,0.7)' }}>Your generated content will appear here.</p>
                     ) : (
                       <p style={{ margin: 0, whiteSpace: 'pre-wrap', color: 'rgba(230,238,252,0.95)', fontSize: '14px' }}>
                         {output || 'Your generated content will appear here.'}
@@ -566,7 +302,7 @@ function Home() {
                                 Image {index + 1}
                               </p>
                             <button
-                              onClick={() => handleDownloadBlogImage(img.url, index)}
+                              onClick={() => handleDownloadBlogImageCall(img.url, index)}
                               style={{
                                 padding: '6px 10px',
                                 borderRadius: '6px',
@@ -735,7 +471,7 @@ function Home() {
               </div>
 
               <div className="actions">
-                <button onClick={handleGenerateImage} className="btn" disabled={imageLoading}>
+                <button onClick={handleGenerateImageCall} className="btn" disabled={imageLoading}>
                   {imageLoading ? 'Generating…' : 'Generate Image'}
                 </button>
               </div>
@@ -751,7 +487,7 @@ function Home() {
               <h4>{mode === 'Image' ? 'Generated Image' : 'Output Text'}</h4>
               {mode === 'Image' && generatedImage && (
                 <button
-                  onClick={handleDownloadImage}
+                  onClick={handleDownloadImageCall}
                   style={{
                     padding: '8px 12px',
                     borderRadius: '8px',
@@ -789,7 +525,7 @@ function Home() {
                 {output && (
                   <button
                     className="copyFloating"
-                    onClick={handleCopy}
+                    onClick={handleCopyText}
                     aria-label="Copy formatted text"
                     title="Copy formatted text"
                   >

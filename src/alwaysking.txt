@@ -1,0 +1,5 @@
+gemini api key = AIzaSyCRjrpXf3Ar08M24Rcmryj2y6H-1mciHuc
+
+gen.pollinations.ai api key = sk_31e9d1570026bbcf5e3c856eb3e1d90aa0c34675a6bfb277
+
+REACT_APP_PEXELS_API_KEY=pMQtkpzaj9ldSbhb1CX7K5NKThR4L4Q9TFYUsRV6Jf1wgFiEWL0w6HyL

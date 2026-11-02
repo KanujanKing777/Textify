@@ -5,7 +5,9 @@ import './Home.css';
 import { handleOpenInNewTab, handleConvertToPDF } from './HomeFun';
 import { generateBlogImages, formatBlogContent, downloadBlogImage } from './utils/blogUtils';
 import { generateImage, downloadImage } from './utils/imageUtils';
+import { generateVideo, downloadVideo } from './utils/videoUtils';
 import { handleCopy } from './utils/textUtils';
+import { Volume2, Pause, Play, Copy, ExternalLink, FileText, Download, Video } from 'lucide-react';
 
 function Home() {
   const [text, setText] = useState('');
@@ -22,6 +24,9 @@ function Home() {
   const [generatedImage, setGeneratedImage] = useState('');
   const [imageModel, setImageModel] = useState('zimage');
   const [imageLoading, setImageLoading] = useState(false);
+  const [videoPrompt, setVideoPrompt] = useState('');
+  const [generatedVideo, setGeneratedVideo] = useState('');
+  const [videoLoading, setVideoLoading] = useState(false);
   const [blogTopic, setBlogTopic] = useState('');
   const [blogLength, setBlogLength] = useState('Medium');
   const [blogStyle, setBlogStyle] = useState('Informative');
@@ -30,6 +35,8 @@ function Home() {
   const [blogImages, setBlogImages] = useState([]);
   const [blogImagesLoading, setBlogImagesLoading] = useState([]);
   const [blogContentLoaded, setBlogContentLoaded] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
 
   // Update blog content loaded state when output or blogOutputFormat changes
   useEffect(() => {
@@ -68,12 +75,61 @@ function Home() {
     handleCopy(output, setCopied);
   };
 
+  const handleReadText = () => {
+    if (!output) return;
+    
+    // If currently speaking, pause it
+    if (window.speechSynthesis.speaking && !isPaused) {
+      window.speechSynthesis.pause();
+      setIsPaused(true);
+      return;
+    }
+    
+    // If paused, resume it
+    if (isPaused) {
+      window.speechSynthesis.resume();
+      setIsPaused(false);
+      return;
+    }
+
+    // Start new speech
+    const utterance = new SpeechSynthesisUtterance(output);
+    utterance.lang = 'en-US';
+    utterance.rate = 1;
+    utterance.pitch = 1;
+    
+    utterance.onstart = () => {
+      setIsSpeaking(true);
+      setIsPaused(false);
+    };
+    
+    utterance.onend = () => {
+      setIsSpeaking(false);
+      setIsPaused(false);
+    };
+    
+    utterance.onerror = () => {
+      setIsSpeaking(false);
+      setIsPaused(false);
+    };
+    
+    window.speechSynthesis.speak(utterance);
+  };
+
   const handleGenerateImageCall = async () => {
     await generateImage(imagePrompt, imageModel, setGeneratedImage, setOutput, setImageLoading);
   };
 
   const handleDownloadImageCall = async () => {
     await downloadImage(generatedImage, setOutput);
+  };
+
+  const handleGenerateVideoCall = async () => {
+    await generateVideo(videoPrompt, setGeneratedVideo, setOutput, setVideoLoading);
+  };
+
+  const handleDownloadVideoCall = async () => {
+    await downloadVideo(generatedVideo, setOutput);
   };
 
   const handleDownloadBlogImageCall = async (imageUrl, index) => {
@@ -120,19 +176,25 @@ function Home() {
               className={mode === 'Blog' ? 'active' : ''}
               onClick={() => setMode('Blog')}
             >
-              Magician
+              Blog
             </button>
             <button
               className={mode === 'Text' ? 'active' : ''}
               onClick={() => setMode('Text')}
             >
-              Wordsmith
+              Text
             </button>
             <button
               className={mode === 'Image' ? 'active' : ''}
               onClick={() => setMode('Image')}
             >
-              Artist
+              Image
+            </button>
+            <button
+              className={mode === 'Video' ? 'active' : ''}
+              onClick={() => setMode('Video')}
+            >
+              Video
             </button>
           </div>
 
@@ -190,15 +252,28 @@ function Home() {
                     <h4 style={{ margin: 0, color: '#e6eefc', fontSize: '14px' }}>Generated Content</h4>
                     <div style={{ display: 'flex', gap: '12px', alignItems: 'center', justifyContent: 'flex-end' }}>
                       {output && (
-                        <button
-                          className="copyFloating"
-                          onClick={handleCopyText}
-                          aria-label="Copy Content"
-                          title="Copy blog content"
-                          style={{ position: 'static', marginBottom: 0, flex: 'none' }}
-                        >
-                          {copied ? 'Copied' : 'Copy'}
-                        </button>
+                        <>
+                          <button
+                            className="copyFloating"
+                            onClick={handleReadText}
+                            aria-label={isSpeaking && !isPaused ? "Pause Reading" : "Read Content"}
+                            title={isSpeaking && !isPaused ? "Pause reading" : "Read content aloud"}
+                            style={{ position: 'static', marginBottom: 0, flex: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}
+                          >
+                            {isSpeaking && !isPaused ? <Pause size={16} /> : isPaused ? <Play size={16} /> : <Volume2 size={16} />}
+                            {isSpeaking && !isPaused ? 'Pause' : isPaused ? 'Play' : 'Read'}
+                          </button>
+                          <button
+                            className="copyFloating"
+                            onClick={handleCopyText}
+                            aria-label="Copy Content"
+                            title="Copy blog content"
+                            style={{ position: 'static', marginBottom: 0, flex: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}
+                          >
+                            <Copy size={16} />
+                            {copied ? 'Copied' : 'Copy'}
+                          </button>
+                        </>
                       )}
 
                       {blogContentLoaded && (blogOutputFormat === 'WebPage' || blogOutputFormat === 'Blog') && (
@@ -216,13 +291,17 @@ function Home() {
                               fontWeight: '600',
                               fontSize: '13px',
                               boxShadow: '0 4px 12px rgba(6,182,212,0.2)',
-                              transition: 'transform .12s ease'
+                              transition: 'transform .12s ease',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px'
                             }}
                             onMouseDown={(e) => e.currentTarget.style.transform = 'translateY(1px)'}
                             onMouseUp={(e) => e.currentTarget.style.transform = 'translateY(0)'}
                             title="Open blog content in a new tab"
                           >
-                            🔗 Open in New Tab
+                            <ExternalLink size={16} />
+                            Open in New Tab
                           </button>
                           <button
                             onClick={handleConvertToPDF}
@@ -237,13 +316,17 @@ function Home() {
                               fontWeight: '600',
                               fontSize: '13px',
                               boxShadow: '0 4px 12px rgba(6,182,212,0.2)',
-                              transition: 'transform .12s ease'
+                              transition: 'transform .12s ease',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px'
                             }}
                             onMouseDown={(e) => e.currentTarget.style.transform = 'translateY(1px)'}
                             onMouseUp={(e) => e.currentTarget.style.transform = 'translateY(0)'}
                             title="Convert blog content to PDF"
                           >
-                            📄 Convert to PDF
+                            <FileText size={16} />
+                            Convert to PDF
                           </button>
                         </>
                       )}
@@ -294,12 +377,12 @@ function Home() {
                           <div key={index} style={{ borderRadius: '10px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)' }}>
                             <img 
                               src={img.url} 
-                              alt={`Generated ${index + 1}`} 
+                              alt={img.caption || img.prompt || `Generated ${index + 1}`} 
                               style={{ width: '100%', height: 'auto', display: 'block', minHeight: '200px' }} 
                             />
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px' }}>
                               <p style={{ margin: 0, fontSize: '12px', color: 'rgba(230,238,252,0.7)' }}>
-                                Image {index + 1}
+                                {img.caption || img.prompt || `Image ${index + 1}`}
                               </p>
                             <button
                               onClick={() => handleDownloadBlogImageCall(img.url, index)}
@@ -314,11 +397,15 @@ function Home() {
                                 fontSize: '11px',
                                 boxShadow: '0 4px 12px rgba(6,182,212,0.2)',
                                 transition: 'transform .12s ease',
-                                whiteSpace: 'nowrap'
+                                whiteSpace: 'nowrap',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px'
                               }}
                               onMouseDown={(e) => e.currentTarget.style.transform = 'translateY(1px)'}
                               onMouseUp={(e) => e.currentTarget.style.transform = 'translateY(0)'}
                             >
+                              <Download size={14} />
                               Download
                             </button>
                           </div>
@@ -480,11 +567,34 @@ function Home() {
             </>
           )}
 
+          {mode === 'Video' && (
+            <>
+              <div style={{ gridColumn: '1 / -1', marginBottom: '16px', padding: '12px', backgroundColor: 'transparent', borderRadius: '8px' }}>
+              </div>
+              <div className="input-container">
+                <label><strong>Video Search:</strong></label>
+                <textarea
+                  className="input"
+                  rows={5}
+                  value={videoPrompt}
+                  onChange={(e) => setVideoPrompt(e.target.value)}
+                  placeholder="e.g. cinematic drone shot over a misty mountain lake at sunrise..."
+                />
+                <div className="actions">
+                  <button onClick={handleGenerateVideoCall} className="btn" disabled={videoLoading}>
+                    <Video size={16} />
+                    {videoLoading ? 'Searching videos…' : 'Find Video'}
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
           
 
           <aside className="preview" aria-live="polite" style={{ display: mode === 'Blog' ? 'none' : 'flex', flexDirection: 'column', gap: '8px', position: 'relative' }}>
             <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h4>{mode === 'Image' ? 'Generated Image' : 'Output Text'}</h4>
+              <h4>{mode === 'Image' ? 'Generated Image' : mode === 'Video' ? 'Generated Video' : 'Output Text'}</h4>
               {mode === 'Image' && generatedImage && (
                 <button
                   onClick={handleDownloadImageCall}
@@ -506,6 +616,16 @@ function Home() {
                   Download
                 </button>
               )}
+              {mode === 'Video' && generatedVideo && (
+                <button
+                  onClick={handleDownloadVideoCall}
+                  className="copyFloating"
+                  style={{ position: 'static' }}
+                >
+                  <Download size={16} />
+                  Download
+                </button>
+              )}
             </div>
             {mode === 'Image' ? (
               <>
@@ -517,6 +637,15 @@ function Home() {
                   </div>
                 ) : (
                   <p style={{ color: 'rgba(230,238,252,0.65)' }}>Your generated image will appear here.</p>
+                )}
+                {output && <p style={{ fontSize: '13px', color: 'rgba(230,238,252,0.75)', marginTop: '8px' }}>{output}</p>}
+              </>
+            ) : mode === 'Video' ? (
+              <>
+                {generatedVideo ? (
+                  <video className="generated-video" src={generatedVideo} controls playsInline />
+                ) : (
+                  <p style={{ color: 'rgba(230,238,252,0.65)' }}>Your Pexels video will appear here.</p>
                 )}
                 {output && <p style={{ fontSize: '13px', color: 'rgba(230,238,252,0.75)', marginTop: '8px' }}>{output}</p>}
               </>

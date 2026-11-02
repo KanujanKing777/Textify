@@ -1,0 +1,29 @@
+{
+  "routes": [
+    {
+      "routePath": "/api/gemini",
+      "mountPath": "/api",
+      "method": "",
+      "module": [
+        "api/gemini.js:onRequest"
+      ]
+    },
+    {
+      "routePath": "/api/image",
+      "mountPath": "/api",
+      "method": "",
+      "module": [
+        "api/image.js:onRequest"
+      ]
+    },
+    {
+      "routePath": "/api/pexels",
+      "mountPath": "/api",
+      "method": "",
+      "module": [
+        "api/pexels.js:onRequest"
+      ]
+    }
+  ],
+  "baseURL": "/"
+}

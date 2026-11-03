@@ -1,0 +1,10 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "textify-api",
+  "main": "workers/api/index.js",
+  "compatibility_date": "2026-11-02",
+  "vars": {
+    "FIREBASE_PROJECT_ID": "letstypifythecontent",
+    "ALLOWED_ORIGINS": "http://localhost:3000,https://letstypifythecontent.web.app,https://letstypifythecontent.firebaseapp.com"
+  }
+}

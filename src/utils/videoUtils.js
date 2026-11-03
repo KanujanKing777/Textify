@@ -1,4 +1,4 @@
-const PEXELS_API_URL = 'https://api.pexels.com/videos/search';
+import { apiPostJson } from '../apiClient';
 
 export const generateVideo = async (videoPrompt, setGeneratedVideo, setOutput, setVideoLoading) => {
   if (!videoPrompt.trim()) {
@@ -6,27 +6,11 @@ export const generateVideo = async (videoPrompt, setGeneratedVideo, setOutput, s
     return;
   }
 
-  const apiKey = process.env.REACT_APP_PEXELS_API_KEY;
-  if (!apiKey) {
-    setOutput('❌ Add REACT_APP_PEXELS_API_KEY to your .env file.');
-    return;
-  }
-
   setVideoLoading(true);
   setGeneratedVideo('');
 
   try {
-    const response = await fetch(
-      `${PEXELS_API_URL}?query=${encodeURIComponent(videoPrompt.trim())}&per_page=1&orientation=landscape`,
-      { headers: { Authorization: apiKey } }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Pexels returned ${response.status}: ${errorText || 'video search failed'}`);
-    }
-
-    const result = await response.json();
+    const result = await apiPostJson('/api/video/search', { query: videoPrompt.trim() });
     const video = result.videos?.[0];
     const videoFile = video?.video_files
       ?.filter((file) => file.file_type === 'video/mp4')

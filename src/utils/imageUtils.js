@@ -1,4 +1,5 @@
 // Image generation utilities
+import { apiRequest } from '../apiClient';
 
 export const generateImage = async (imagePrompt, imageModel, setGeneratedImage, setOutput, setImageLoading) => {
   if (!imagePrompt.trim()) {
@@ -8,39 +9,21 @@ export const generateImage = async (imagePrompt, imageModel, setGeneratedImage, 
   
   setImageLoading(true);
   try {
-    const encodedPrompt = encodeURIComponent(imagePrompt.trim());
-    const params = new URLSearchParams({
-      model: imageModel,
-      width: '1024',
-      height: '1024',
-      seed: '0',
-      enhance: 'false',
-      negative_prompt: 'worst quality, blurry',
-      private: 'true',
-      nologo: 'false',
-      nofeed: 'false',
-      safe: 'false',
-      quality: 'medium',
-      image: '',
-      transparent: 'false',
-      guidance_scale: '1'
+    const response = await apiRequest('/api/image/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt: imagePrompt.trim(),
+        model: imageModel,
+      }),
     });
-    const imageUrl = `https://gen.pollinations.ai/image/${encodedPrompt}?${params.toString()}&key=${encodeURIComponent("sk_JnVq787jGJsEXLWLKMZoZsm82ejmdZKn")}`;
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      setGeneratedImage(imageUrl);
-      setOutput('✅ Image generated successfully!');
-      setImageLoading(false);
-    };
-    img.onerror = () => {
-      setOutput('❌ Failed to generate image.');
-      setImageLoading(false);
-    };
-    img.src = imageUrl;
+    const imageUrl = URL.createObjectURL(await response.blob());
+    setGeneratedImage(imageUrl);
+    setOutput('✅ Image generated successfully!');
   } catch (err) {
-    setOutput('❌ Error generating image.');
+    setOutput(`❌ ${err.message || 'Error generating image.'}`);
     console.error(err);
+  } finally {
     setImageLoading(false);
   }
 };

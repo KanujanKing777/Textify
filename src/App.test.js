@@ -1,8 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import App from './App';
 
-test('renders learn react link', () => {
+test('shows Firebase setup instructions when web app configuration is missing', () => {
   render(<App />);
-  const linkElement = screen.getByText(/learn react/i);
-  expect(linkElement).toBeInTheDocument();
+  expect(screen.getByText(/Firebase Authentication is not configured/i)).toBeInTheDocument();
+  expect(screen.getByText(/Missing Firebase web app configuration/i)).toBeInTheDocument();
 });

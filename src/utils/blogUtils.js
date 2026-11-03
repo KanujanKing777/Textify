@@ -1,5 +1,6 @@
 /* eslint-disable jsx-a11y/img-redundant-alt */
 import React from 'react';
+import { apiRequest } from '../apiClient';
 
 // Generate images for blog with multiple model fallbacks
 export const generateBlogImages = async (imagePrompts, setBlogImages, setBlogImagesLoading) => {
@@ -19,47 +20,16 @@ export const generateBlogImages = async (imagePrompts, setBlogImages, setBlogIma
       
       for (const model of modelsToTry) {
         try {
-          const encodedPrompt = encodeURIComponent(prompt.trim());
-          const params = new URLSearchParams({
-            model: model,
-            width: '1024',
-            height: '1024',
-            seed: '0',
-            enhance: 'false',
-            negative_prompt: 'worst quality, blurry',
-            private: 'true',
-            nologo: 'false',
-            nofeed: 'false',
-            safe: 'false',
-            quality: 'medium',
-            image: '',
-            transparent: 'false',
-            guidance_scale: '1'
+          const response = await apiRequest('/api/image/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              prompt: prompt.trim(),
+              model,
+            }),
           });
-          const testUrl = `https://gen.pollinations.ai/image/${encodedPrompt}?${params.toString()}&key=${encodeURIComponent("sk_JnVq787jGJsEXLWLKMZoZsm82ejmdZKn")}`;
-          
-          const testImage = new Image();
-          testImage.crossOrigin = 'anonymous';
-          
-          // eslint-disable-next-line no-loop-func
-          const imageLoadPromise = new Promise((resolve) => {
-            testImage.onload = () => {
-              imageUrl = testUrl;
-              console.log(`Successfully generated image with model: ${model}`);
-              resolve(true);
-            };
-            testImage.onerror = () => {
-              console.log(`Model ${model} failed for prompt, trying next...`);
-              resolve(false);
-            };
-            testImage.src = testUrl;
-          });
-          
-          if (await imageLoadPromise) {
-            if (imageUrl) {
-              break;
-            }
-          }
+          imageUrl = URL.createObjectURL(await response.blob());
+          break;
         } catch (modelErr) {
           console.log(`Model ${model} failed for prompt, trying next...`);
           continue;

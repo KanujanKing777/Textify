@@ -1,0 +1,97 @@
+.auth-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  box-sizing: border-box;
+  background: #0b1220;
+  color: #e6eefc;
+}
+
+.auth-card {
+  width: min(100%, 380px);
+  padding: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  box-sizing: border-box;
+}
+
+.auth-card h1 {
+  margin: 0 0 8px;
+}
+
+.auth-card form {
+  display: grid;
+  gap: 10px;
+}
+
+.auth-card input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  background: #111b2d;
+  color: inherit;
+  box-sizing: border-box;
+}
+
+.auth-card button {
+  width: 100%;
+  margin-top: 8px;
+  padding: 11px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #7c3aed, #06b6d4);
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-card button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.auth-card .google-sign-in {
+  background: #1b2940;
+}
+
+.auth-card .auth-toggle {
+  background: transparent;
+  color: #aebbd0;
+}
+
+.auth-error {
+  color: #ff9a9a;
+  overflow-wrap: anywhere;
+}
+
+.auth-config-error {
+  max-width: 680px;
+  margin: auto;
+  padding: 28px;
+  color: #e6eefc;
+  font-family: sans-serif;
+}
+
+.auth-config-error code {
+  color: #8bd3e6;
+}
+
+.authenticated-app {
+  position: relative;
+}
+
+.sign-out-button {
+  position: absolute;
+  z-index: 1;
+  top: 16px;
+  right: 16px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  background: #111b2d;
+  color: #e6eefc;
+  cursor: pointer;
+}

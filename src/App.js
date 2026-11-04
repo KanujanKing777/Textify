@@ -6,10 +6,13 @@ import { apiBaseUrl } from './apiClient';
 import { auth, firebaseConfigError } from './firebase';
 import Home from './Home';
 import './AuthScreen.css';
+import LandingPage from './LandingPage';
 
 function App() {
   const [user, setUser] = useState(null);
   const [authReady, setAuthReady] = useState(false);
+  const [showAuth, setShowAuth] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(true);
 
   useEffect(() => {
     if (!auth) return undefined;
@@ -43,7 +46,23 @@ function App() {
   }
 
   if (!user) {
-    return <AuthScreen />;
+    return showAuth ? (
+      <AuthScreen
+        initialIsRegistering={isRegistering}
+        onBack={() => setShowAuth(false)}
+      />
+    ) : (
+      <LandingPage
+        onCreateAccount={() => {
+          setIsRegistering(true);
+          setShowAuth(true);
+        }}
+        onSignIn={() => {
+          setIsRegistering(false);
+          setShowAuth(true);
+        }}
+      />
+    );
   }
 
   return (

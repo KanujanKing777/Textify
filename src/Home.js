@@ -5,9 +5,8 @@ import './Home.css';
 import { handleOpenInNewTab, handleConvertToPDF } from './HomeFun';
 import { generateBlogImages, formatBlogContent, downloadBlogImage } from './utils/blogUtils';
 import { generateImage, downloadImage } from './utils/imageUtils';
-import { generateVideo, downloadVideo } from './utils/videoUtils';
 import { handleCopy } from './utils/textUtils';
-import { Volume2, Pause, Play, Copy, ExternalLink, FileText, Download, Video } from 'lucide-react';
+import { Volume2, Pause, Play, Copy, ExternalLink, FileText, Download } from 'lucide-react';
 
 function Home() {
   const [text, setText] = useState('');
@@ -24,9 +23,6 @@ function Home() {
   const [generatedImage, setGeneratedImage] = useState('');
   const [imageModel, setImageModel] = useState('zimage');
   const [imageLoading, setImageLoading] = useState(false);
-  const [videoPrompt, setVideoPrompt] = useState('');
-  const [generatedVideo, setGeneratedVideo] = useState('');
-  const [videoLoading, setVideoLoading] = useState(false);
   const [blogTopic, setBlogTopic] = useState('');
   const [blogLength, setBlogLength] = useState('Medium');
   const [blogStyle, setBlogStyle] = useState('Informative');
@@ -124,14 +120,6 @@ function Home() {
     await downloadImage(generatedImage, setOutput);
   };
 
-  const handleGenerateVideoCall = async () => {
-    await generateVideo(videoPrompt, setGeneratedVideo, setOutput, setVideoLoading);
-  };
-
-  const handleDownloadVideoCall = async () => {
-    await downloadVideo(generatedVideo, setOutput);
-  };
-
   const handleDownloadBlogImageCall = async (imageUrl, index) => {
     await downloadBlogImage(imageUrl, index);
   };
@@ -189,12 +177,6 @@ function Home() {
               onClick={() => setMode('Image')}
             >
               Image
-            </button>
-            <button
-              className={mode === 'Video' ? 'active' : ''}
-              onClick={() => setMode('Video')}
-            >
-              Video
             </button>
           </div>
 
@@ -567,34 +549,9 @@ function Home() {
             </>
           )}
 
-          {mode === 'Video' && (
-            <>
-              <div style={{ gridColumn: '1 / -1', marginBottom: '16px', padding: '12px', backgroundColor: 'transparent', borderRadius: '8px' }}>
-              </div>
-              <div className="input-container">
-                <label><strong>Video Search:</strong></label>
-                <textarea
-                  className="input"
-                  rows={5}
-                  value={videoPrompt}
-                  onChange={(e) => setVideoPrompt(e.target.value)}
-                  placeholder="e.g. cinematic drone shot over a misty mountain lake at sunrise..."
-                />
-                <div className="actions">
-                  <button onClick={handleGenerateVideoCall} className="btn" disabled={videoLoading}>
-                    <Video size={16} />
-                    {videoLoading ? 'Searching videos…' : 'Find Video'}
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-
-          
-
           <aside className="preview" aria-live="polite" style={{ display: mode === 'Blog' ? 'none' : 'flex', flexDirection: 'column', gap: '8px', position: 'relative' }}>
             <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h4>{mode === 'Image' ? 'Generated Image' : mode === 'Video' ? 'Generated Video' : 'Output Text'}</h4>
+              <h4>{mode === 'Image' ? 'Generated Image' : 'Output Text'}</h4>
               {mode === 'Image' && generatedImage && (
                 <button
                   onClick={handleDownloadImageCall}
@@ -616,16 +573,6 @@ function Home() {
                   Download
                 </button>
               )}
-              {mode === 'Video' && generatedVideo && (
-                <button
-                  onClick={handleDownloadVideoCall}
-                  className="copyFloating"
-                  style={{ position: 'static' }}
-                >
-                  <Download size={16} />
-                  Download
-                </button>
-              )}
             </div>
             {mode === 'Image' ? (
               <>
@@ -637,15 +584,6 @@ function Home() {
                   </div>
                 ) : (
                   <p style={{ color: 'rgba(230,238,252,0.65)' }}>Your generated image will appear here.</p>
-                )}
-                {output && <p style={{ fontSize: '13px', color: 'rgba(230,238,252,0.75)', marginTop: '8px' }}>{output}</p>}
-              </>
-            ) : mode === 'Video' ? (
-              <>
-                {generatedVideo ? (
-                  <video className="generated-video" src={generatedVideo} controls playsInline />
-                ) : (
-                  <p style={{ color: 'rgba(230,238,252,0.65)' }}>Your Pexels video will appear here.</p>
                 )}
                 {output && <p style={{ fontSize: '13px', color: 'rgba(230,238,252,0.75)', marginTop: '8px' }}>{output}</p>}
               </>

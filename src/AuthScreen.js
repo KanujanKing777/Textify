@@ -8,8 +8,8 @@ import {
 import { auth } from './firebase';
 import './AuthScreen.css';
 
-function AuthScreen() {
-  const [isRegistering, setIsRegistering] = useState(false);
+function AuthScreen({ initialIsRegistering = false, onBack }) {
+  const [isRegistering, setIsRegistering] = useState(initialIsRegistering);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -47,8 +47,9 @@ function AuthScreen() {
   return (
     <main className="auth-page">
       <section className="auth-card" aria-labelledby="auth-title">
-        <h1 id="auth-title">Textify</h1>
-        <p>{isRegistering ? 'Create an account to continue.' : 'Sign in to continue.'}</p>
+        <div className="auth-brand"><span className="auth-brand-mark">T</span><span>textify</span></div>
+        <h1 id="auth-title">{isRegistering ? 'Create your account' : 'Welcome back'}</h1>
+        <p className="auth-intro">{isRegistering ? 'Your next great idea starts here.' : 'Sign in to pick up where you left off.'}</p>
         <form onSubmit={submit}>
           <label htmlFor="auth-email">Email</label>
           <input
@@ -87,6 +88,11 @@ function AuthScreen() {
         >
           {isRegistering ? 'Already have an account? Sign in' : 'Need an account? Create one'}
         </button>
+        {onBack && (
+          <button className="auth-back" type="button" onClick={onBack}>
+            Back to home
+          </button>
+        )}
       </section>
     </main>
   );

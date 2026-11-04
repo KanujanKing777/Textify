@@ -4,7 +4,7 @@
 
 It can generate content in multiple formats, including:  
 - Blog posts  
-- Pexels stock videos  
+- Image creation
 - PDFs  
 - And more  
 

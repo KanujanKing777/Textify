@@ -93,6 +93,56 @@
           flex-direction:column;
           gap:6px;
         }
+        .story-theme-options {
+          display:flex;
+          flex-wrap:wrap;
+          gap:8px;
+        }
+        .story-theme-option {
+          padding:8px 12px;
+          border:1px solid rgba(255,255,255,0.12);
+          border-radius:999px;
+          background:rgba(255,255,255,0.03);
+          color:rgba(230,238,252,0.8);
+          font-size:13px;
+          cursor:pointer;
+          transition:background .15s ease, border-color .15s ease, color .15s ease;
+        }
+        .story-theme-option:hover:not(:disabled) {
+          border-color:rgba(124,58,237,0.55);
+          color:#fff;
+        }
+        .story-theme-option.selected {
+          border-color:rgba(124,58,237,0.7);
+          background:linear-gradient(90deg, rgba(124,58,237,0.7), rgba(6,182,212,0.65));
+          color:#fff;
+        }
+        .story-theme-option:disabled {
+          cursor:not-allowed;
+          opacity:0.75;
+        }
+        .story-custom-theme {
+          display:flex;
+          align-items:center;
+          gap:8px;
+        }
+        .story-custom-theme .input {
+          margin-top:0;
+        }
+        .story-theme-add {
+          min-height:42px;
+          padding:0 12px;
+          border:1px solid rgba(255,255,255,0.12);
+          border-radius:10px;
+          background:rgba(255,255,255,0.04);
+          color:#e6eefc;
+          font-weight:600;
+          cursor:pointer;
+        }
+        .story-theme-add:disabled {
+          cursor:not-allowed;
+          opacity:0.5;
+        }
         label strong { font-size:13px; color: #cfe9ff; }
         /* improved select styling (more visible text + custom arrow) */
         select.select {

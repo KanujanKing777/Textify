@@ -26,7 +26,8 @@ function Home() {
   const [imageModel, setImageModel] = useState('zimage');
   const [imageLoading, setImageLoading] = useState(false);
   const [blogTopic, setBlogTopic] = useState('');
-  const [storyTheme, setStoryTheme] = useState('');
+  const [storyThemes, setStoryThemes] = useState([]);
+  const [isCustomThemeSelected, setIsCustomThemeSelected] = useState(false);
   const [customStoryTheme, setCustomStoryTheme] = useState('');
   const [blogLength, setBlogLength] = useState('Medium');
   const [blogStyle, setBlogStyle] = useState('Informative');
@@ -128,24 +129,41 @@ function Home() {
     await downloadBlogImage(imageUrl, index);
   };
 
+  const handleStoryThemeToggle = (theme) => {
+    setStoryThemes((currentThemes) => {
+      if (currentThemes.includes(theme)) {
+        return currentThemes.length > 1
+          ? currentThemes.filter((currentTheme) => currentTheme !== theme)
+          : currentThemes;
+      }
+      return [...currentThemes, theme];
+    });
+  };
+
+  const handleAddCustomStoryTheme = () => {
+    const theme = customStoryTheme.trim();
+    if (theme && !storyThemes.includes(theme)) {
+      setStoryThemes((currentThemes) => (
+        currentThemes.includes(theme) ? currentThemes : [...currentThemes, theme]
+      ));
+      setCustomStoryTheme('');
+    }
+  };
+
   const handleGenerateBlogCall = async () => {
     if (!blogTopic.trim()) {
       setOutput(`❌ Please enter a ${blogOutputFormat === 'Story' ? 'story idea' : 'blog topic'}.`);
       return;
     }
-    if (blogOutputFormat === 'Story' && !storyTheme) {
+    if (blogOutputFormat === 'Story' && storyThemes.length === 0) {
       setOutput('❌ Please select a theme for your story.');
-      return;
-    }
-    if (blogOutputFormat === 'Story' && storyTheme === 'Custom' && !customStoryTheme.trim()) {
-      setOutput('❌ Please enter your custom story theme.');
       return;
     }
     setBlogLoading(true);
     setBlogImages([]);
     setBlogImagesLoading([]);
     try {
-      const selectedStoryTheme = storyTheme === 'Custom' ? customStoryTheme.trim() : storyTheme;
+      const selectedStoryTheme = storyThemes.join(', ');
       const result = await generateBlog(blogTopic, blogLength, blogStyle, blogOutputFormat, selectedStoryTheme);
       setOutput(result.content || '');
       
@@ -219,33 +237,69 @@ function Home() {
                   </div>
                   {blogOutputFormat === 'Story' && (
                     <div className="field">
-                      <label htmlFor="story-theme"><strong>Theme:</strong></label>
-                      <select
-                        id="story-theme"
-                        className="select"
-                        value={storyTheme}
-                        onChange={(e) => setStoryTheme(e.target.value)}
-                        required
-                      >
-                        <option value="">Select a theme</option>
-                        <option value="Sci-fi">Sci-fi</option>
-                        <option value="Thriller">Thriller</option>
-                        <option value="Drama">Drama</option>
-                        <option value="Comedy">Comedy</option>
-                        <option value="Action">Action</option>
-                        <option value="Adventure">Adventure</option>
-                        <option value="Custom">Custom</option>
-                      </select>
-                      {storyTheme === 'Custom' && (
-                        <input
-                          className="input"
-                          type="text"
-                          value={customStoryTheme}
-                          onChange={(e) => setCustomStoryTheme(e.target.value)}
-                          placeholder="Enter a custom theme..."
-                          aria-label="Custom story theme"
-                          required
-                        />
+                      <label><strong>Theme (select at least one):</strong></label>
+                      <div className="story-theme-options" role="group" aria-label="Story themes">
+                        {['Sci-fi', 'Thriller', 'Drama', 'Comedy', 'Action', 'Adventure'].map((theme) => (
+                          <button
+                            key={theme}
+                            type="button"
+                            className={`story-theme-option${storyThemes.includes(theme) ? ' selected' : ''}`}
+                            aria-pressed={storyThemes.includes(theme)}
+                            onClick={() => handleStoryThemeToggle(theme)}
+                            disabled={storyThemes.length === 1 && storyThemes.includes(theme)}
+                          >
+                            {theme}
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          className={`story-theme-option${isCustomThemeSelected ? ' selected' : ''}`}
+                          aria-pressed={isCustomThemeSelected}
+                          onClick={() => setIsCustomThemeSelected((selected) => !selected)}
+                        >
+                          Custom
+                        </button>
+                        {storyThemes
+                          .filter((theme) => !['Sci-fi', 'Thriller', 'Drama', 'Comedy', 'Action', 'Adventure'].includes(theme))
+                          .map((theme) => (
+                            <button
+                              key={theme}
+                              type="button"
+                              className="story-theme-option selected"
+                              aria-pressed="true"
+                              onClick={() => handleStoryThemeToggle(theme)}
+                              disabled={storyThemes.length === 1}
+                              title="Click to remove this custom theme"
+                            >
+                              {theme}
+                            </button>
+                          ))}
+                      </div>
+                      {isCustomThemeSelected && (
+                        <div className="story-custom-theme">
+                          <input
+                            className="input"
+                            type="text"
+                            value={customStoryTheme}
+                            onChange={(e) => setCustomStoryTheme(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleAddCustomStoryTheme();
+                              }
+                            }}
+                            placeholder="Add your own theme..."
+                            aria-label="Custom story theme"
+                          />
+                          <button
+                            type="button"
+                            className="story-theme-add"
+                            onClick={handleAddCustomStoryTheme}
+                            disabled={!customStoryTheme.trim()}
+                          >
+                            Add theme
+                          </button>
+                        </div>
                       )}
                     </div>
                   )}

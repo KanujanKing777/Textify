@@ -8,6 +8,8 @@ import { generateImage, downloadImage } from './utils/imageUtils';
 import { handleCopy } from './utils/textUtils';
 import { Volume2, Pause, Play, Copy, ExternalLink, FileText, Download } from 'lucide-react';
 
+const formattedBlogOutputFormats = ['Blog', 'Story', 'Comic'];
+
 function Home() {
   const [text, setText] = useState('');
   const [platform, setPlatform] = useState('Whatsapp');
@@ -24,9 +26,11 @@ function Home() {
   const [imageModel, setImageModel] = useState('zimage');
   const [imageLoading, setImageLoading] = useState(false);
   const [blogTopic, setBlogTopic] = useState('');
+  const [storyTheme, setStoryTheme] = useState('');
+  const [customStoryTheme, setCustomStoryTheme] = useState('');
   const [blogLength, setBlogLength] = useState('Medium');
   const [blogStyle, setBlogStyle] = useState('Informative');
-  const [blogOutputFormat, setBlogOutputFormat] = useState('WebPage');
+  const [blogOutputFormat, setBlogOutputFormat] = useState('Blog');
   const [blogLoading, setBlogLoading] = useState(false);
   const [blogImages, setBlogImages] = useState([]);
   const [blogImagesLoading, setBlogImagesLoading] = useState([]);
@@ -36,7 +40,7 @@ function Home() {
 
   // Update blog content loaded state when output or blogOutputFormat changes
   useEffect(() => {
-    if (output && (blogOutputFormat === 'WebPage' || blogOutputFormat === 'Blog')) {
+    if (output && formattedBlogOutputFormats.includes(blogOutputFormat)) {
       setBlogContentLoaded(true);
     } else {
       setBlogContentLoaded(false);
@@ -126,14 +130,23 @@ function Home() {
 
   const handleGenerateBlogCall = async () => {
     if (!blogTopic.trim()) {
-      setOutput('❌ Please enter a blog topic.');
+      setOutput(`❌ Please enter a ${blogOutputFormat === 'Story' ? 'story idea' : 'blog topic'}.`);
+      return;
+    }
+    if (blogOutputFormat === 'Story' && !storyTheme) {
+      setOutput('❌ Please select a theme for your story.');
+      return;
+    }
+    if (blogOutputFormat === 'Story' && storyTheme === 'Custom' && !customStoryTheme.trim()) {
+      setOutput('❌ Please enter your custom story theme.');
       return;
     }
     setBlogLoading(true);
     setBlogImages([]);
     setBlogImagesLoading([]);
     try {
-      const result = await generateBlog(blogTopic, blogLength, blogStyle);
+      const selectedStoryTheme = storyTheme === 'Custom' ? customStoryTheme.trim() : storyTheme;
+      const result = await generateBlog(blogTopic, blogLength, blogStyle, blogOutputFormat, selectedStoryTheme);
       setOutput(result.content || '');
       
       if (result.images && result.images.length > 0) {
@@ -191,7 +204,7 @@ function Home() {
                   className="input"
                   value={blogTopic}
                   onChange={(e) => setBlogTopic(e.target.value)}
-                  placeholder="Enter your Topic or main idea..."
+                  placeholder={blogOutputFormat === 'Story' ? 'Enter your story idea...' : 'Enter your Topic or main idea...'}
                 />
 
                 <div className="controls">
@@ -204,21 +217,56 @@ function Home() {
                       <option value="Detailed">Detailed</option>
                     </select>
                   </div>
-                  <div className="field">
-                    <label><strong>Style:</strong></label>
-                    <select className="select" value={blogStyle} onChange={(e) => setBlogStyle(e.target.value)}>
-                      <option value="Informative">Informative</option>
-                      <option value="Casual">Casual</option>
-                      <option value="Professional">Professional</option>
-                      <option value="Creative">Creative</option>
-                      <option value="Educational">Educational</option>
-                    </select>
-                  </div>
+                  {blogOutputFormat === 'Story' && (
+                    <div className="field">
+                      <label htmlFor="story-theme"><strong>Theme:</strong></label>
+                      <select
+                        id="story-theme"
+                        className="select"
+                        value={storyTheme}
+                        onChange={(e) => setStoryTheme(e.target.value)}
+                        required
+                      >
+                        <option value="">Select a theme</option>
+                        <option value="Sci-fi">Sci-fi</option>
+                        <option value="Thriller">Thriller</option>
+                        <option value="Drama">Drama</option>
+                        <option value="Comedy">Comedy</option>
+                        <option value="Action">Action</option>
+                        <option value="Adventure">Adventure</option>
+                        <option value="Custom">Custom</option>
+                      </select>
+                      {storyTheme === 'Custom' && (
+                        <input
+                          className="input"
+                          type="text"
+                          value={customStoryTheme}
+                          onChange={(e) => setCustomStoryTheme(e.target.value)}
+                          placeholder="Enter a custom theme..."
+                          aria-label="Custom story theme"
+                          required
+                        />
+                      )}
+                    </div>
+                  )}
+                  {blogOutputFormat !== 'Story' && (
+                    <div className="field">
+                      <label><strong>Style:</strong></label>
+                      <select className="select" value={blogStyle} onChange={(e) => setBlogStyle(e.target.value)}>
+                        <option value="Informative">Informative</option>
+                        <option value="Casual">Casual</option>
+                        <option value="Professional">Professional</option>
+                        <option value="Creative">Creative</option>
+                        <option value="Educational">Educational</option>
+                      </select>
+                    </div>
+                  )}
                   <div className="field">
                     <label><strong>Output Format:</strong></label>
                     <select className="select" value={blogOutputFormat} onChange={(e) => setBlogOutputFormat(e.target.value)}>
-                      <option value="WebPage" title="Fully prepared content">Cooked</option>
-                      <option value="Raw" title="Raw Text & Images">Raw</option>
+                      <option value="Blog">Blog</option>
+                      <option value="Story">Story</option>
+                      <option value="Comic">Comic</option>
                     </select>
                   </div>
                 </div>
@@ -258,7 +306,7 @@ function Home() {
                         </>
                       )}
 
-                      {blogContentLoaded && (blogOutputFormat === 'WebPage' || blogOutputFormat === 'Blog') && (
+                      {blogContentLoaded && formattedBlogOutputFormats.includes(blogOutputFormat) && (
                         <>
                           <button
                             onClick={handleOpenInNewTab}
@@ -317,7 +365,7 @@ function Home() {
                   
                 </div>
                   <div id='blogcontent' style={{ margin: 0, color: 'rgba(230,238,252,0.95)', fontSize: '14px' }}>
-                    {blogOutputFormat === 'WebPage' || blogOutputFormat === 'PDF' ? (
+                    {formattedBlogOutputFormats.includes(blogOutputFormat) ? (
                       formatBlogContentCall(output) || <p style={{ color: 'rgba(230,238,252,0.7)' }}>Your generated content will appear here.</p>
                     ) : (
                       <p style={{ margin: 0, whiteSpace: 'pre-wrap', color: 'rgba(230,238,252,0.95)', fontSize: '14px' }}>
@@ -328,7 +376,7 @@ function Home() {
 
                   
 
-                {(blogImages.length > 0 || blogImagesLoading.length > 0) && blogOutputFormat !== 'WebPage' && blogOutputFormat !== 'PDF' && (
+                {(blogImages.length > 0 || blogImagesLoading.length > 0) && !formattedBlogOutputFormats.includes(blogOutputFormat) && (
                   <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
                     <h4 style={{ margin: '0 0 16px 0', color: '#e6eefc', fontSize: '14px' }}>Generated Images</h4>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>

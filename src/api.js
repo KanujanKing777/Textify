@@ -21,6 +21,10 @@ export async function generateText(text, platform, tone, withe) {
   return result.text || '';
 }
 
-export async function generateBlog(topic, length, style) {
-  return apiPostJson('/api/blog/generate', { topic, length, style });
+export async function generateBlog(topic, length, style, outputFormat = 'Blog', theme = '') {
+  const request = { topic, length, outputFormat, theme };
+  if (outputFormat !== 'Story') {
+    request.style = style;
+  }
+  return apiPostJson('/api/blog/generate', request);
 }

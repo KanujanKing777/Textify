@@ -90,13 +90,34 @@ async function generateText(body, env) {
 }
 
 async function generateBlog(body, env) {
-  const { topic, length, style } = body;
+  const { topic, length, style, theme } = body;
+  const outputFormat = body.outputFormat || 'Blog';
   requireText(topic, 'topic');
-  const blogContent = await generateGemini(
-    `Write a ${length} blog post about "${topic}" in a ${style} style. Make it engaging and well-structured with an introduction, body paragraphs, and conclusion. I want only the blog content as output not anything else`,
+  if (outputFormat === 'Story') {
+    requireText(theme, 'theme');
+  }
+  const content = await generateGemini(
+    outputFormat === 'Story'
+      ? `Write a ${length} story about "${topic}" under the theme "${theme.trim()}". Make the theme central to the story and write it like a story from a conventional storybook, using natural prose paragraphs. Where the story has major turning points, organize it into chapters with short, evocative subtitles, such as "Chapter 1: The Hidden Door". Do not use bullets, numbered lists, or list-style numbering; number only chapter headings. Do not add a separate conclusion section, summary, or moral; let the narrative reach a natural ending. I want only the story content, not anything else.`
+      : `Write a ${length} blog post about "${topic}" in a ${style} style. Make it engaging and well-structured with an introduction, body paragraphs, and conclusion. I want only the blog content as output not anything else`,
     env,
   );
-  const prompt = `I am preparing for a blog article using this content: ${blogContent}
+  const prompt = outputFormat === 'Story'
+    ? `I am preparing a story under the theme "${theme.trim()}" using this content: ${content}
+
+Format this as a conventional storybook: preserve natural prose paragraphs and divide the story into chapters at major turning points, using short, evocative subtitles in headings formatted as "Chapter 1: Subtitle", "Chapter 2: Subtitle", and so on. Use no bullets, numbered lists, or numbering other than chapter numbers. Do not add a separate conclusion heading, summary, moral, or closing commentary; preserve a natural narrative ending.
+
+Cut the story into meaningful scenes and place image prompts between the prose at appropriate points, without interrupting chapter headings. Image prompts should be as detailed as possible. Keep every image coherent with the story theme, and use the same visual style, color palette, lighting, and setting throughout. Identify the visual details of each recurring character and repeat those details consistently in every image prompt where that character appears, so the character looks like the same person in each scene. For every image, also provide a concise, meaningful caption on exactly one line, no longer than 200 characters.
+
+Please prepare a JSON type output like:
+{
+  "1": {"type": "heading", "content": "Chapter 1: Subtitle", "level": 2},
+  "2": {"type": "image", "prompt": "detailed image description with consistent character and style details", "caption": "concise one-line caption under 200 characters"},
+  "3": {"type": "paragraph", "content": "text"}
+}
+
+Please return only the raw JSON as the output`
+    : `I am preparing for a blog article using this content: ${content}
 
 Now cut this into meaningful chunks and also I need to add some images in between, so add prompts for images too. Image prompts should be as detailed as possible. For every image, also provide a concise, meaningful caption on exactly one line, no longer than 200 characters.
 

@@ -59,9 +59,8 @@
           color: rgba(230,238,252,0.8);
           opacity:0.9;
         }
-        textarea.input {
+        textarea.input, input.input {
           width:100%;
-          min-height:180px;
           border-radius: 12px;
           margin-top:10px;
           padding:14px;
@@ -70,11 +69,14 @@
           color: var(--muted);
           border: 1px solid rgba(255,255,255,0.04);
           outline: none;
-          resize: vertical;
           font-size:15px;
           transition: box-shadow .18s ease, transform .12s ease;
         }
-        textarea.input:focus {
+        textarea.input {
+          min-height:180px;
+          resize: vertical;
+        }
+        textarea.input:focus, input.input:focus {
           box-shadow: 0 6px 22px rgba(99,102,241,0.09);
           transform: translateY(-2px);
           border-color: rgba(124,58,237,0.45);

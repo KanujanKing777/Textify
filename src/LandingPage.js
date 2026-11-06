@@ -7,7 +7,6 @@ import {
   FileText,
   Image,
   Sparkles,
-  WandSparkles,
 } from 'lucide-react';
 import './LandingPage.css';
 
@@ -16,20 +15,20 @@ const logoUrl = `${process.env.PUBLIC_URL}/favicon.png`;
 const features = [
   {
     icon: BookOpenText,
-    title: 'Write long-form content',
-    description: 'Turn a topic into a polished blog post, add image suggestions, and export your finished work as a PDF.',
+    title: 'Create a blog',
+    description: 'Turn a topic into a polished, well-structured blog with suggested images to bring your ideas to life.',
     className: 'feature-lilac',
   },
   {
-    icon: WandSparkles,
-    title: 'Make every word work',
-    description: 'Generate or refine text for the right platform, voice, and length — from a quick message to a full draft.',
+    icon: FileText,
+    title: 'Tell a story',
+    description: 'Build a story around your idea and chosen themes, with scenes and visuals to make it memorable.',
     className: 'feature-peach',
   },
   {
-    icon: Image,
-    title: 'Bring ideas to life',
-    description: 'Create original images from a simple prompt, all from one creative workspace.',
+    icon: Sparkles,
+    title: 'Make a comic',
+    description: 'Turn an idea into a sequence of illustrated comic panels with characters, dialogue, and narration.',
     className: 'feature-mint',
   },
 ];
@@ -60,7 +59,7 @@ function LandingPage({ onCreateAccount, onSignIn }) {
             <div className="hero-eyebrow"><span className="eyebrow-dot" /> YOUR ALL-IN-ONE AI STUDIO</div>
             <h1>Big ideas deserve<br /> <span>a little help.</span></h1>
             <p className="hero-description">
-              Write, create, and bring your next idea to life. Textify puts the tools to make it happen in one inspiring place.
+              Create blogs, stories, and comics from your ideas. Textify brings writing and visuals together in one inspiring place.
             </p>
             <div className="hero-actions">
               <button className="primary-cta" type="button" onClick={onCreateAccount}>
@@ -88,12 +87,13 @@ function LandingPage({ onCreateAccount, onSignIn }) {
               </div>
               <div className="workspace-content">
                 <span className="workspace-kicker">A fresh start</span>
-                <h2>What will you<br />make today?</h2>
+                <h2>What will you<br />create today?</h2>
                 <p>One idea can take you anywhere.</p>
                 <div className="workspace-input">A little inspiration goes a long way<span><ArrowRight size={14} /></span></div>
                 <div className="workspace-tools">
-                  <span><FileText size={14} /> Write</span>
-                  <span><Image size={14} /> Images</span>
+                  <span><BookOpenText size={14} /> Blog</span>
+                  <span><FileText size={14} /> Story</span>
+                  <span><Sparkles size={14} /> Comic</span>
                 </div>
               </div>
             </div>
@@ -104,11 +104,11 @@ function LandingPage({ onCreateAccount, onSignIn }) {
         </section>
 
         <section className="capabilities-strip" aria-label="Textify capabilities">
-          <span>ONE STUDIO, LOTS OF WAYS TO CREATE</span>
+          <span>ONE STUDIO, THREE WAYS TO CREATE</span>
           <div className="capability-list">
-            <span><BookOpenText size={16} /> Blog writing</span>
-            <span><WandSparkles size={16} /> Text generation</span>
-            <span><Image size={16} /> Image creation</span>
+            <span><BookOpenText size={16} /> Blog</span>
+            <span><FileText size={16} /> Story</span>
+            <span><Sparkles size={16} /> Comic</span>
           </div>
         </section>
 
@@ -140,8 +140,8 @@ function LandingPage({ onCreateAccount, onSignIn }) {
           </div>
           <div className="how-steps">
             <div className="how-step"><span>01</span><div><h3>Bring your idea</h3><p>Start with a topic, a rough draft, or just a spark of inspiration.</p></div></div>
-            <div className="how-step"><span>02</span><div><h3>Choose your tools</h3><p>Write, polish, or create visuals — pick what moves your idea forward.</p></div></div>
-            <div className="how-step"><span>03</span><div><h3>Make it yours</h3><p>Shape the result, copy it, download it, and share it with the world.</p></div></div>
+            <div className="how-step"><span>02</span><div><h3>Choose your format</h3><p>Shape your idea into a blog, a story, or a comic.</p></div></div>
+            <div className="how-step"><span>03</span><div><h3>Make it yours</h3><p>Review your creation, refine the result, and share it with the world.</p></div></div>
           </div>
         </section>
 
@@ -151,7 +151,7 @@ function LandingPage({ onCreateAccount, onSignIn }) {
           <div className="cta-content">
             <span className="cta-kicker"><Sparkles size={15} /> YOUR NEXT IDEA IS WAITING</span>
             <h2>Ready when<br />you are.</h2>
-            <p>Make room for more creating. Your Textify studio is one account away.</p>
+            <p>Make room for more creating. Your Textify is one account away.</p>
             <button type="button" onClick={onCreateAccount}>Create your account <ArrowRight size={18} /></button>
           </div>
         </section>

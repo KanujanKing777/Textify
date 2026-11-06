@@ -264,7 +264,14 @@ function Home() {
 
       <div className="page">
         <div className="card" role="region" aria-label="Textify">
-          
+          <header className="workspace-heading">
+            <span className="workspace-heading-mark"><FileText size={21} /></span>
+            <div>
+              <p className="workspace-eyebrow">Textify studio</p>
+              <h1>What would you like to create?</h1>
+              <p>Start with an idea and shape it into something worth sharing.</p>
+            </div>
+          </header>
 
           <div className="mode-toggle">
             <button
@@ -459,13 +466,13 @@ function Home() {
                   </button>
                 </div>
 
-                <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <div className="generated-content-section" style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                <div className="generated-content-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                     {blogOutputFormat !== 'Comic' && (
                       <h4 style={{ margin: 0, color: '#e6eefc', fontSize: '14px' }}>Generated Content</h4>
                     )}
                     {blogOutputFormat !== 'Comic' && (
-                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center', justifyContent: 'flex-end' }}>
+                    <div className="generated-content-actions" style={{ display: 'flex', gap: '12px', alignItems: 'center', justifyContent: 'flex-end' }}>
                       {output && (
                         <>
                           <button
@@ -572,7 +579,7 @@ function Home() {
                     {blogOutputFormat !== 'Comic' && (
                       <h4 style={{ margin: '0 0 16px 0', color: '#e6eefc', fontSize: '14px' }}>Generated Images</h4>
                     )}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
+                    <div className="generated-image-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 250px), 1fr))', gap: '16px' }}>
                       {/* Show loading skeletons for loading images */}
                       {blogImagesLoading.map((isLoading, index) => (
                         isLoading ? (

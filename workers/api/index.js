@@ -101,34 +101,38 @@ async function generateBlog(body, env) {
     if (!Number.isInteger(imageCount) || imageCount < 1 || imageCount > 32) {
       throw httpError('Comic image count must be a whole number between 1 and 32.', 400);
     }
-    const comicPrompt = `Create a comic about "${topic}" with exactly ${imageCount} illustrations/panels under the theme "${theme.trim()}". Write all dialogue and narration in English, regardless of the language of the topic or theme. Every "text" value in the lettering must be English. Each panel will be generated as its own separate image, so each panel description must depict only one scene in one frame. Never combine multiple panels or scenes into one image. Plan the complete comic first, then return one JSON object with these fields:
-- "sharedArtDirection": one detailed visual style and world guide to apply identically to every image, including a fixed color palette, linework/rendering style, lighting, environment/background design, and composition rules. Keep the same world and visual treatment throughout; scene content may change, but never the established style or palette.
-- "sharedCharacterGuide": canonical appearance descriptions for every recurring character. Specify stable facial features, hair, clothing, body proportions, and distinguishing details. Reuse these exact descriptions in every image where each character appears; do not redesign, recolor, or change costumes between panels.
-- "sharedLetteringStyle": one detailed lettering guide that must be identical in every panel: choose and specify a consistent font style, weight, text color, text size relative to each bubble, bubble fill and outline, narration-box styling, padding, and placement rules. Do not vary typography, text color, bubble styling, or scale between panels.
-- "panels": an array of exactly ${imageCount} objects in sequential order. Each panel must have:
-  - "prompt": only one scene's action, expressions, staging, and camera framing for one standalone image containing exactly one frame. Include the relevant canonical character descriptions from "sharedCharacterGuide". Do not describe or request multiple frames, panels, scenes, a grid, collage, storyboard, or page layout. Do not invent a different art style, palette, background treatment, or lettering style here.
-  - "lettering": an array of objects, one for each piece of visible text. Include at least one item per panel; it can be character dialogue, narration, or both. Each item must have "speaker" (a character's name for dialogue or "Narration"), "placement" (where the speech bubble or narration box appears), and "text" (the exact words to print inside it). Render character dialogue inside a visible speech bubble with the text printed legibly inside; render narration inside a visible narration box.
+    const MAX_LETTERING_ITEMS = 1;   // fewer text items = far fewer garbled words
+    const MAX_WORDS_PER_ITEM = 8;
 
-Use the shared guides unchanged for all panels. Make backgrounds feel like the same locations and world, maintaining continuity of environment, palette, lighting, and rendering. Write all dialogue and narration in English. Text accuracy is essential: the English "text" value is authoritative, so preserve its spelling, capitalization, punctuation, and wording exactly. Do not translate, paraphrase, add words, or include speaker/placement labels as printed text. Every panel must include at least one lettering item: either character dialogue, narration, or both. Ensure every lettering item is visibly rendered: character dialogue in a speech bubble and narration in a narration box. The full sequence must tell a coherent story with a beginning, development, and ending.
+    const comicPrompt = `Create a story about "${topic}" under the theme "${theme.trim()}", told through exactly ${imageCount} separate illustrations. Write all dialogue and narration in English, regardless of the language of the topic or theme.
 
-MANDATORY OUTPUT FORMAT:
-Return one JSON object with all of these top-level fields:
-- "sharedArtDirection": a non-empty string.
-- "sharedCharacterGuide": a non-empty string.
-- "sharedLetteringStyle": a non-empty string.
-- "panels": an array containing exactly ${imageCount} panel objects.
+Plan the whole story first, with a clear beginning, middle, and ending. EVERY illustration must show a DIFFERENT moment: a new action, a new location or camera setup, and visible story progress compared with the one before. Never repeat the same scene from another angle. Each illustration is generated as its own standalone image showing one scene.
 
-Every object in "panels" must contain:
-- "prompt": a non-empty string describing that panel's scene.
-- "lettering": a non-empty array of lettering objects.
+Return one JSON object with these fields:
+- "sharedArtDirection": a concise (under 80 words) description of the look: color palette, linework/rendering style, lighting, overall world. Describe the look only. Do not mention layouts, pages, borders, text, or speech bubbles.
+- "sharedCharacterGuide": a concise (under 100 words) description of each recurring character: face, hair, clothing, body proportions, distinguishing details. Describe appearance only.
+- "panels": an array of exactly ${imageCount} objects in story order. Each has:
+  - "beat": one short sentence saying what NEW thing happens here.
+  - "setting": the specific place and time of day.
+  - "prompt": ONE moment described visually: the characters' actions, expressions, positions, and camera framing, including their appearance from the character guide. Do not mention text, speech, bubbles, captions, or layout.
+  - "lettering": an array of 1 to ${MAX_LETTERING_ITEMS} objects, each with:
+      "speaker": the character's name, or "Narration".
+      "speakerRef": a short visual reference to who is talking, such as "the boy in the orange shirt" or "the small robot" (use "" for Narration).
+      "placement": where it sits, such as "top left" or "bottom".
+      "text": the words to print.
 
-Every object in a panel's "lettering" array must contain:
-- "speaker": a non-empty string (a character's name for dialogue or "Narration").
-- "placement": a non-empty string describing where the bubble or narration box appears.
-- "text": a non-empty string containing the exact English text to print.
-Every panel's "lettering" array must contain at least one item, which may be character dialogue, narration, or both.
+LETTERING RULES (image generators cannot render long text):
+- Each "text" must be ${MAX_WORDS_PER_ITEM} words or fewer, in simple common English words.
+- No unusual names, rare words, numbers, or special symbols in "text".
+- Never include the speaker's name or placement inside "text".
 
-Before responding, check that the JSON parses; all three shared-guide fields are present, strings, and non-empty; "panels" is an array of exactly ${imageCount} objects; every panel has a non-empty string "prompt" and a non-empty "lettering" array with at least one dialogue or narration item; and every lettering object has non-empty string "speaker", "placement", and "text" fields. These are required fields: do not omit any of them. Output only the JSON object—no Markdown, code fences, comments, or surrounding text.`;
+Return only one valid JSON object with exactly the top-level fields "sharedArtDirection", "sharedCharacterGuide", "panels". All fields are required and non-empty. Output only the JSON, with no Markdown, no code fences, no comments.`;
+
+    // Words that make image models draw layouts or print meta text.
+    const BANNED = /\b(panels?|frames?|grid|collage|storyboard|strip|split[- ]screen|diptych|triptych|montage|comic page|pages?|bubbles?|captions?|lettering|fonts?|shared|labels?)\b/i;
+    const wordCount = (s) => s.trim().split(/\s+/).length;
+    const isStr = (v) => typeof v === 'string' && v.trim().length > 0;
+
     let comic;
     let validationError;
     for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -139,55 +143,86 @@ Before responding, check that the JSON parses; all three shared-guide fields are
       );
       let candidate;
       try {
-        const result = raw.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+        const result = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
         candidate = JSON.parse(result);
-        console.log(candidate);
       } catch (error) {
         if (!(error instanceof SyntaxError)) throw error;
         validationError = new Error('Text provider returned invalid comic descriptions.');
         continue;
       }
 
-      if (!candidate
-        || typeof candidate.sharedArtDirection !== 'string'
-        || !candidate.sharedArtDirection.trim()
-        || typeof candidate.sharedCharacterGuide !== 'string'
-        || !candidate.sharedCharacterGuide.trim()
-        || typeof candidate.sharedLetteringStyle !== 'string'
-        || !candidate.sharedLetteringStyle.trim()
-        || !Array.isArray(candidate.panels)
-        || candidate.panels.length !== imageCount
-        || candidate.panels.some((panel) => (
-          !panel
-          || typeof panel.prompt !== 'string'
-          || !panel.prompt.trim()
-          || !Array.isArray(panel.lettering)
-          || panel.lettering.length === 0
-          || panel.lettering.some((item) => (
-            !item
-            || typeof item.speaker !== 'string'
-            || !item.speaker.trim()
-            || typeof item.placement !== 'string'
-            || !item.placement.trim()
-            || typeof item.text !== 'string'
-            || !item.text.trim()
+      const valid = candidate
+        && isStr(candidate.sharedArtDirection)
+        && isStr(candidate.sharedCharacterGuide)
+        && !BANNED.test(candidate.sharedArtDirection)
+        && !BANNED.test(candidate.sharedCharacterGuide)
+        && Array.isArray(candidate.panels)
+        && candidate.panels.length === imageCount
+        && candidate.panels.every((panel) => (
+          panel
+          && isStr(panel.prompt)
+          && isStr(panel.beat)
+          && isStr(panel.setting)
+          && !BANNED.test(panel.prompt)
+          && !BANNED.test(panel.setting)
+          && Array.isArray(panel.lettering)
+          && panel.lettering.length >= 1
+          && panel.lettering.length <= MAX_LETTERING_ITEMS
+          && panel.lettering.every((item) => (
+            item
+            && isStr(item.speaker)
+            && isStr(item.placement)
+            && isStr(item.text)
+            && wordCount(item.text) <= MAX_WORDS_PER_ITEM
+            // the speaker's name must never be inside the printed text
+            && !item.text.toLowerCase().includes(item.speaker.trim().toLowerCase())
           ))
-        ))) {
-        validationError = new Error(`Comic descriptions must include shared art, character, and lettering guides with exactly ${imageCount} valid panels.`);
+        ));
+
+      if (!valid) {
+        validationError = new Error(`Comic descriptions must include guides and exactly ${imageCount} valid scenes with short English text.`);
         continue;
       }
       comic = candidate;
       break;
     }
     if (!comic) throw validationError;
+
+    const art = comic.sharedArtDirection.trim();
+    const characters = comic.sharedCharacterGuide.trim();
+
     return {
       content: '',
-      images: comic.panels.map(({ prompt, lettering }) => ({
-        prompt: `A single illustration, one panel only, full frame, IMAGE REQUIREMENT: Generate exactly one standalone image for this request, showing one scene in one frame only. This is one comic panel, single illustration, full frame, not a full comic page or a collection of panels/illustrations.(no borders, no outlines to the image generated). Do not create multiple frames, panels, scenes, a grid, collage, storyboard, strip, contact sheet, inset panels, or alternate versions. Keep the entire image as one continuous composition.\n\nREQUIRED VISIBLE LETTERING: All visible lettering must be in English. Render every dialogue item below as a clearly visible speech bubble in the image, with its exact English text legible inside the bubble. Do not omit, hide, translate, or replace dialogue text with symbols. Render any Narration item as a visible narration box containing its exact English text. Do not render speaker names or placement instructions as printed text.\n\nSHARED COMIC ART DIRECTION — apply exactly to this image and keep identical across every page:\n${comic.sharedArtDirection.trim()}\n\nSHARED CHARACTER CONTINUITY — reproduce recurring characters exactly as described; do not alter their appearance between pages:\n${comic.sharedCharacterGuide.trim()}\n\nSHARED LETTERING STYLE — use this same typography and bubble treatment on every page, without variation:\n${comic.sharedLetteringStyle.trim()}\n\nONE SCENE FOR THIS FRAME:\n${prompt.trim()}\n\nEXACT COMIC LETTERING — render all quoted text below exactly in English. Preserve every word, spelling, capitalization, and punctuation mark. Do not translate, add, omit, substitute, or repeat text. Make it legible and apply the shared lettering style.\n${lettering.map(({ speaker, placement, text }) => `- ${speaker} (${placement}): "${text}"`).join('\n')}`,
-      })),
+      images: comic.panels.map(({ prompt, setting, beat, lettering }, index) => {
+        const previousBeat = index > 0 ? comic.panels[index - 1].beat.trim().replace(/[.!?]+$/, '') : null;
+
+        // Plain sentences only: no names of speakers, no numbering, no headings.
+        const textSentences = lettering.map(({ speaker, speakerRef, placement, text }) => {
+          const clean = text.trim().replace(/"/g, '');
+          if (speaker.trim().toLowerCase() === 'narration') {
+            return `A plain white rectangular box at the ${placement.trim()} of the image contains the words "${clean}".`;
+          }
+          const who = isStr(speakerRef) ? speakerRef.trim() : 'the character who is talking';
+          return `A white speech bubble at the ${placement.trim()} of the image, with its tail pointing to ${who}, contains the words "${clean}".`;
+        }).join(' ');
+
+        return {
+          prompt: [
+            `One single wide illustration of one moment, drawn as one continuous picture that fills the whole image from edge to edge, with no borders and no dividing lines.`,
+            `${prompt.trim().replace(/[.!?]+$/, '')}. ${beat.trim().replace(/[.!?]+$/, '')}. The location is ${setting.trim().replace(/[.!?]+$/, '')}.`,
+            previousBeat
+              ? `This moment looks clearly different from the one just before it, in which ${previousBeat.charAt(0).toLowerCase()}${previousBeat.slice(1)}, with a different action, pose, and camera view.`
+              : '',
+            `The characters look like this, and they look identical in every picture of the story: ${characters}`,
+            `The artwork is drawn in this look, identical in every picture of the story: ${art}`,
+            textSentences,
+            `The only words visible anywhere in the image are the words just given, written in clear, large, correctly spelled English with bold black comic lettering. There are no other words, names, titles, captions, labels, numbers, or watermarks.`,
+          ].filter(Boolean).join('\n\n'),
+        };
+      }),
     };
   }
-
+  
   const content = await generateGemini(
     outputFormat === 'Story'
       ? `Write a ${length} story about "${topic}" under the theme "${theme.trim()}". Make the theme central to the story and write it like a story from a conventional storybook, using natural prose paragraphs. Where the story has major turning points, organize it into chapters with short, evocative subtitles, such as "Chapter 1: The Hidden Door". Do not use bullets, numbered lists, or list-style numbering; number only chapter headings. Do not add a separate conclusion section, summary, or moral; let the narrative reach a natural ending. I want only the story content, not anything else.`

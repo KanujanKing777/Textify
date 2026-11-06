@@ -1,4 +1,4 @@
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL = 'gemini-3.5-flash-lite';
 const POLLINATIONS_IMAGE_URL = 'https://gen.pollinations.ai/image/';
 const PEXELS_VIDEO_URL = 'https://api.pexels.com/videos/search';
 const FIREBASE_JWKS_URL = 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com';
@@ -93,9 +93,101 @@ async function generateBlog(body, env) {
   const { topic, length, style, theme } = body;
   const outputFormat = body.outputFormat || 'Blog';
   requireText(topic, 'topic');
-  if (outputFormat === 'Story') {
+  if (outputFormat === 'Story' || outputFormat === 'Comic') {
     requireText(theme, 'theme');
   }
+  if (outputFormat === 'Comic') {
+    const imageCount = body.imageCount;
+    if (!Number.isInteger(imageCount) || imageCount < 1 || imageCount > 32) {
+      throw httpError('Comic image count must be a whole number between 1 and 32.', 400);
+    }
+    const comicPrompt = `Create a comic about "${topic}" with exactly ${imageCount} illustrations/panels under the theme "${theme.trim()}". Write all dialogue and narration in English, regardless of the language of the topic or theme. Every "text" value in the lettering must be English. Each panel will be generated as its own separate image, so each panel description must depict only one scene in one frame. Never combine multiple panels or scenes into one image. Plan the complete comic first, then return one JSON object with these fields:
+- "sharedArtDirection": one detailed visual style and world guide to apply identically to every image, including a fixed color palette, linework/rendering style, lighting, environment/background design, and composition rules. Keep the same world and visual treatment throughout; scene content may change, but never the established style or palette.
+- "sharedCharacterGuide": canonical appearance descriptions for every recurring character. Specify stable facial features, hair, clothing, body proportions, and distinguishing details. Reuse these exact descriptions in every image where each character appears; do not redesign, recolor, or change costumes between panels.
+- "sharedLetteringStyle": one detailed lettering guide that must be identical in every panel: choose and specify a consistent font style, weight, text color, text size relative to each bubble, bubble fill and outline, narration-box styling, padding, and placement rules. Do not vary typography, text color, bubble styling, or scale between panels.
+- "panels": an array of exactly ${imageCount} objects in sequential order. Each panel must have:
+  - "prompt": only one scene's action, expressions, staging, and camera framing for one standalone image containing exactly one frame. Include the relevant canonical character descriptions from "sharedCharacterGuide". Do not describe or request multiple frames, panels, scenes, a grid, collage, storyboard, or page layout. Do not invent a different art style, palette, background treatment, or lettering style here.
+  - "lettering": an array of objects, one for each piece of visible text. Include at least one item per panel; it can be character dialogue, narration, or both. Each item must have "speaker" (a character's name for dialogue or "Narration"), "placement" (where the speech bubble or narration box appears), and "text" (the exact words to print inside it). Render character dialogue inside a visible speech bubble with the text printed legibly inside; render narration inside a visible narration box.
+
+Use the shared guides unchanged for all panels. Make backgrounds feel like the same locations and world, maintaining continuity of environment, palette, lighting, and rendering. Write all dialogue and narration in English. Text accuracy is essential: the English "text" value is authoritative, so preserve its spelling, capitalization, punctuation, and wording exactly. Do not translate, paraphrase, add words, or include speaker/placement labels as printed text. Every panel must include at least one lettering item: either character dialogue, narration, or both. Ensure every lettering item is visibly rendered: character dialogue in a speech bubble and narration in a narration box. The full sequence must tell a coherent story with a beginning, development, and ending.
+
+MANDATORY OUTPUT FORMAT:
+Return one JSON object with all of these top-level fields:
+- "sharedArtDirection": a non-empty string.
+- "sharedCharacterGuide": a non-empty string.
+- "sharedLetteringStyle": a non-empty string.
+- "panels": an array containing exactly ${imageCount} panel objects.
+
+Every object in "panels" must contain:
+- "prompt": a non-empty string describing that panel's scene.
+- "lettering": a non-empty array of lettering objects.
+
+Every object in a panel's "lettering" array must contain:
+- "speaker": a non-empty string (a character's name for dialogue or "Narration").
+- "placement": a non-empty string describing where the bubble or narration box appears.
+- "text": a non-empty string containing the exact English text to print.
+Every panel's "lettering" array must contain at least one item, which may be character dialogue, narration, or both.
+
+Before responding, check that the JSON parses; all three shared-guide fields are present, strings, and non-empty; "panels" is an array of exactly ${imageCount} objects; every panel has a non-empty string "prompt" and a non-empty "lettering" array with at least one dialogue or narration item; and every lettering object has non-empty string "speaker", "placement", and "text" fields. These are required fields: do not omit any of them. Output only the JSON object—no Markdown, code fences, comments, or surrounding text.`;
+    let comic;
+    let validationError;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const raw = await generateGemini(
+        comicPrompt,
+        env,
+        { responseMimeType: 'application/json' },
+      );
+      let candidate;
+      try {
+        const result = raw.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+        candidate = JSON.parse(result);
+        console.log(candidate);
+      } catch (error) {
+        if (!(error instanceof SyntaxError)) throw error;
+        validationError = new Error('Text provider returned invalid comic descriptions.');
+        continue;
+      }
+
+      if (!candidate
+        || typeof candidate.sharedArtDirection !== 'string'
+        || !candidate.sharedArtDirection.trim()
+        || typeof candidate.sharedCharacterGuide !== 'string'
+        || !candidate.sharedCharacterGuide.trim()
+        || typeof candidate.sharedLetteringStyle !== 'string'
+        || !candidate.sharedLetteringStyle.trim()
+        || !Array.isArray(candidate.panels)
+        || candidate.panels.length !== imageCount
+        || candidate.panels.some((panel) => (
+          !panel
+          || typeof panel.prompt !== 'string'
+          || !panel.prompt.trim()
+          || !Array.isArray(panel.lettering)
+          || panel.lettering.length === 0
+          || panel.lettering.some((item) => (
+            !item
+            || typeof item.speaker !== 'string'
+            || !item.speaker.trim()
+            || typeof item.placement !== 'string'
+            || !item.placement.trim()
+            || typeof item.text !== 'string'
+            || !item.text.trim()
+          ))
+        ))) {
+        validationError = new Error(`Comic descriptions must include shared art, character, and lettering guides with exactly ${imageCount} valid panels.`);
+        continue;
+      }
+      comic = candidate;
+      break;
+    }
+    if (!comic) throw validationError;
+    return {
+      content: '',
+      images: comic.panels.map(({ prompt, lettering }) => ({
+        prompt: `A single illustration, one panel only, full frame, IMAGE REQUIREMENT: Generate exactly one standalone image for this request, showing one scene in one frame only. This is one comic panel, single illustration, full frame, not a full comic page or a collection of panels/illustrations.(no borders, no outlines to the image generated). Do not create multiple frames, panels, scenes, a grid, collage, storyboard, strip, contact sheet, inset panels, or alternate versions. Keep the entire image as one continuous composition.\n\nREQUIRED VISIBLE LETTERING: All visible lettering must be in English. Render every dialogue item below as a clearly visible speech bubble in the image, with its exact English text legible inside the bubble. Do not omit, hide, translate, or replace dialogue text with symbols. Render any Narration item as a visible narration box containing its exact English text. Do not render speaker names or placement instructions as printed text.\n\nSHARED COMIC ART DIRECTION — apply exactly to this image and keep identical across every page:\n${comic.sharedArtDirection.trim()}\n\nSHARED CHARACTER CONTINUITY — reproduce recurring characters exactly as described; do not alter their appearance between pages:\n${comic.sharedCharacterGuide.trim()}\n\nSHARED LETTERING STYLE — use this same typography and bubble treatment on every page, without variation:\n${comic.sharedLetteringStyle.trim()}\n\nONE SCENE FOR THIS FRAME:\n${prompt.trim()}\n\nEXACT COMIC LETTERING — render all quoted text below exactly in English. Preserve every word, spelling, capitalization, and punctuation mark. Do not translate, add, omit, substitute, or repeat text. Make it legible and apply the shared lettering style.\n${lettering.map(({ speaker, placement, text }) => `- ${speaker} (${placement}): "${text}"`).join('\n')}`,
+      })),
+    };
+  }
+
   const content = await generateGemini(
     outputFormat === 'Story'
       ? `Write a ${length} story about "${topic}" under the theme "${theme.trim()}". Make the theme central to the story and write it like a story from a conventional storybook, using natural prose paragraphs. Where the story has major turning points, organize it into chapters with short, evocative subtitles, such as "Chapter 1: The Hidden Door". Do not use bullets, numbered lists, or list-style numbering; number only chapter headings. Do not add a separate conclusion section, summary, or moral; let the narrative reach a natural ending. I want only the story content, not anything else.`
@@ -225,7 +317,7 @@ async function searchVideos(body, env) {
   return response.json();
 }
 
-async function generateGemini(prompt, env) {
+async function generateGemini(prompt, env, generationConfig) {
   const apiKey = env.GEMINI_API_KEY?.trim();
   if (!apiKey) {
     throw new Error('Text generation is not configured.');
@@ -236,7 +328,10 @@ async function generateGemini(prompt, env) {
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        ...(generationConfig ? { generationConfig } : {}),
+      }),
     },
   );
   if (!response.ok) {

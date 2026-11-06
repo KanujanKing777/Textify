@@ -88,10 +88,42 @@
           flex-wrap:wrap;
           align-items:center;
         }
+        .blog-controls {
+          flex-direction:column;
+          align-items:stretch;
+        }
         .field {
           display:flex;
           flex-direction:column;
           gap:6px;
+        }
+        .choice-options {
+          display:flex;
+          flex-wrap:wrap;
+          gap:8px;
+        }
+        .choice-option {
+          padding:8px 12px;
+          border:1px solid rgba(255,255,255,0.12);
+          border-radius:999px;
+          background:rgba(255,255,255,0.03);
+          color:rgba(230,238,252,0.8);
+          font-size:13px;
+          cursor:pointer;
+          transition:background .15s ease, border-color .15s ease, color .15s ease;
+        }
+        .choice-option:hover {
+          border-color:rgba(124,58,237,0.55);
+          color:#fff;
+        }
+        .choice-option.selected {
+          border-color:rgba(124,58,237,0.7);
+          background:linear-gradient(90deg, rgba(124,58,237,0.7), rgba(6,182,212,0.65));
+          color:#fff;
+        }
+        .choice-option:focus-visible {
+          outline:3px solid #67e8f9;
+          outline-offset:3px;
         }
         .story-theme-options {
           display:flex;
@@ -279,5 +311,109 @@
           }
           100% {
             background-position: -200% 0;
+          }
+        }
+        .comic-page-thumbnail {
+          display: block;
+          width: 100%;
+          padding: 0;
+          border: 0;
+          background: transparent;
+          cursor: zoom-in;
+        }
+        .comic-page-thumbnail:focus-visible,
+        .comic-viewer-backdrop button:focus-visible {
+          outline: 3px solid #67e8f9;
+          outline-offset: 3px;
+        }
+        .comic-page-caption {
+          margin: 0;
+          padding: 10px;
+          text-align: center;
+          color: #e6eefc;
+          font-size: 14px;
+          font-weight: 600;
+        }
+        .comic-viewer-backdrop {
+          position: fixed;
+          inset: 0;
+          width: 100vw;
+          height: 100vh;
+          height: 100dvh;
+          z-index: 1000;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 56px 72px;
+          box-sizing: border-box;
+          background: rgba(3, 7, 18, 0.94);
+        }
+        .card:has(.comic-viewer-backdrop) {
+          backdrop-filter: none;
+          -webkit-backdrop-filter: none;
+        }
+        .comic-viewer-content {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 12px;
+          min-width: 0;
+          min-height: 0;
+          max-width: 100%;
+          max-height: calc(100dvh - 112px);
+          margin: 0;
+        }
+        .comic-viewer-content img {
+          display: block;
+          width: auto;
+          height: auto;
+          max-width: min(100%, calc(100vw - 144px), 1200px);
+          max-height: calc(100dvh - 160px);
+          object-fit: contain;
+          box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+        }
+        .comic-viewer-content figcaption {
+          color: #fff;
+          font-size: 16px;
+          font-weight: 600;
+        }
+        .comic-viewer-backdrop button {
+          position: absolute;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 48px;
+          height: 48px;
+          padding: 0;
+          border: 1px solid rgba(255,255,255,0.2);
+          border-radius: 50%;
+          background: rgba(15, 23, 42, 0.85);
+          color: white;
+          cursor: pointer;
+        }
+        .comic-viewer-backdrop .comic-viewer-close {
+          top: 20px;
+          right: 20px;
+        }
+        .comic-viewer-backdrop .comic-viewer-previous {
+          left: 20px;
+        }
+        .comic-viewer-backdrop .comic-viewer-next {
+          right: 20px;
+        }
+        @media (max-width: 600px) {
+          .comic-viewer-backdrop {
+            padding: 56px 48px;
+            width: 100vw;
+          }
+          .comic-viewer-content img {
+            max-width: calc(100vw - 96px);
+            max-height: calc(100dvh - 144px);
+          }
+          .comic-viewer-backdrop .comic-viewer-previous {
+            left: 6px;
+          }
+          .comic-viewer-backdrop .comic-viewer-next {
+            right: 6px;
           }
         }

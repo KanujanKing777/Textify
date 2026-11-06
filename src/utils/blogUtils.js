@@ -4,20 +4,21 @@ import { apiRequest } from '../apiClient';
 
 // Generate images for blog with multiple model fallbacks
 export const generateBlogImages = async (imagePrompts, setBlogImages, setBlogImagesLoading) => {
-  const modelsToTry = ['nanobanana-pro', 'nanobanana', 'gptimage', 'zimage'];
+  const modelsToTry = ['nanobanana-pro', 'nanobanana', 'gptimage', 'kontext'];
   
   if (!imagePrompts || imagePrompts.length === 0) return;
   
   setBlogImagesLoading(new Array(imagePrompts.length).fill(true));
 
-  imagePrompts.forEach((entry, promptIndex) => {
-    (async () => {
-      const prompt = typeof entry === 'string' ? entry : (entry.prompt || '');
-      const caption = typeof entry === 'string'
-        ? entry
-        : (entry.caption || entry.prompt || '').replace(/\s+/g, ' ').trim();
-      let imageUrl = null;
-      
+  const results = await Promise.all(imagePrompts.map(async (entry, promptIndex) => {
+    const prompt = typeof entry === 'string' ? entry : (entry.prompt || '');
+    const caption = typeof entry === 'string'
+      ? entry
+      : (entry.caption || entry.prompt || '').replace(/\s+/g, ' ').trim();
+    let imageUrl = null;
+    let lastError;
+
+    for (let pass = 0; pass < 3 && !imageUrl; pass += 1) {
       for (const model of modelsToTry) {
         try {
           const response = await apiRequest('/api/image/generate', {
@@ -31,40 +32,58 @@ export const generateBlogImages = async (imagePrompts, setBlogImages, setBlogIma
           imageUrl = URL.createObjectURL(await response.blob());
           break;
         } catch (modelErr) {
-          console.log(`Model ${model} failed for prompt, trying next...`);
-          continue;
+          lastError = modelErr;
+          console.log(`Model ${model} failed for prompt on pass ${pass + 1}/3, trying the next model or retrying the sequence...`);
         }
       }
-      
-      if (imageUrl) {
-        setBlogImages((prev) => {
-          const updated = [...prev];
-          updated[promptIndex] = {
-            url: imageUrl,
-            prompt: prompt,
-            caption: caption
-          };
-          return updated;
+    }
+
+    if (!imageUrl) {
+      try {
+        const response = await apiRequest('/api/image/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: prompt.trim(),
+            model: 'zimage',
+          }),
         });
-        setBlogImagesLoading((prev) => {
-          const updated = [...prev];
-          updated[promptIndex] = false;
-          return updated;
-        });
-      } else {
-        console.error('Failed to generate image for prompt:', prompt);
-        setBlogImagesLoading((prev) => {
-          const updated = [...prev];
-          updated[promptIndex] = false;
-          return updated;
-        });
+        imageUrl = URL.createObjectURL(await response.blob());
+      } catch (modelErr) {
+        lastError = modelErr;
       }
-    })();
-  });
+    }
+
+    if (imageUrl) {
+      setBlogImages((prev) => {
+        const updated = [...prev];
+        updated[promptIndex] = {
+          url: imageUrl,
+          prompt,
+          caption,
+        };
+        return updated;
+      });
+      setBlogImagesLoading((prev) => {
+        const updated = [...prev];
+        updated[promptIndex] = false;
+        return updated;
+      });
+    } else {
+      console.error('Failed to generate image for prompt:', prompt, lastError);
+      setBlogImagesLoading((prev) => {
+        const updated = [...prev];
+        updated[promptIndex] = false;
+        return updated;
+      });
+    }
+    return Boolean(imageUrl);
+  }));
+  return results.every(Boolean);
 };
 
 // Format blog content with markdown-like syntax
-export const formatBlogContent = (text, blogImages) => {
+export const formatBlogContent = (text, blogImages, onImageClick) => {
   if (!text) return null;
   
   const lines = text.split('\n');
@@ -77,17 +96,24 @@ export const formatBlogContent = (text, blogImages) => {
         return (
           // eslint-disable-next-line react/jsx-no-comment-textnodes
           <div key={index} style={{ margin: '16px 0', textAlign: 'center' }}>
-            <img 
-              src={blogImages[imageNum].url} 
-              alt={blogImages[imageNum].caption || blogImages[imageNum].prompt || `Image ${imageNum + 1}`}
-              style={{ 
-                maxWidth: '100%', 
-                height: 'auto', 
-                borderRadius: '8px',
-                border: '1px solid rgba(255,255,255,0.1)',
-                maxHeight: '400px'
-              }} 
-            />
+            <button
+              type="button"
+              className="comic-page-thumbnail"
+              onClick={() => onImageClick?.(imageNum)}
+              aria-label={`Enlarge image ${imageNum + 1}`}
+            >
+              <img 
+                src={blogImages[imageNum].url} 
+                alt={blogImages[imageNum].caption || blogImages[imageNum].prompt || `Image ${imageNum + 1}`}
+                style={{ 
+                  maxWidth: '100%', 
+                  height: 'auto', 
+                  borderRadius: '8px',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  maxHeight: '400px'
+                }} 
+              />
+            </button>
              <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: 'rgba(230,238,252,0.6)' }}>
                {blogImages[imageNum].caption || blogImages[imageNum].prompt || `Image ${imageNum + 1}`}
              </p>

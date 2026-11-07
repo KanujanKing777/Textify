@@ -229,6 +229,7 @@ body {
   font-weight: 650;
   line-height: 1.2;
   letter-spacing: -.8px;
+  overflow-wrap: anywhere;
 }
 
 .workspace-heading > div:last-child > p:last-child {
@@ -432,6 +433,7 @@ select.select option { background: #111b2d; color: var(--studio-text); }
 
 .preview h4 { margin: 0; color: #edf2ff; font-size: 13px; font-weight: 650; }
 .preview p { margin: 0; color: #d5deed; font-size: 13px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.preview > div:first-child { flex-wrap: wrap; gap: 8px; }
 .copyFloating {
   min-height: 34px;
   display: inline-flex;
@@ -463,8 +465,9 @@ select.select option { background: #111b2d; color: var(--studio-text); }
 #blogcontent img,
 .preview img { max-width: 100%; height: auto; }
 #blogcontent pre,
-#blogcontent table { max-width: 100%; overflow-x: auto; }
-#blogcontent pre { white-space: pre; }
+#blogcontent table { max-width: 100%; }
+#blogcontent pre { overflow-x: auto; white-space: pre; }
+#blogcontent table { display: block; overflow-x: auto; }
 .generated-content-toolbar,
 .generated-content-actions { flex-wrap: wrap; }
 .generated-content-actions { min-width: 0; }

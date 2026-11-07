@@ -129,10 +129,15 @@
   padding: 28px;
   color: #e6eefc;
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  overflow-wrap: anywhere;
 }
 
 .auth-config-error code { color: #67e8f9; }
 .authenticated-app { position: relative; }
+
+@media (max-height: 520px) {
+  .auth-page { align-items: start; }
+}
 
 @media (max-width: 480px) {
   .auth-card { padding: 30px 24px; }

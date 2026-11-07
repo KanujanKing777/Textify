@@ -6,10 +6,50 @@ import { handleOpenInNewTab, handleConvertToPDF } from './HomeFun';
 import { generateBlogImages, formatBlogContent, downloadBlogImage } from './utils/blogUtils';
 import { generateImage, downloadImage } from './utils/imageUtils';
 import { handleCopy } from './utils/textUtils';
-import { Volume2, Pause, Play, Copy, ExternalLink, FileText, Download, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Volume2, Pause, Play, Copy, ExternalLink, FileText, Download, X, ChevronLeft, ChevronRight, Menu } from 'lucide-react';
+import { auth, db } from './firebase';
+import {
+  saveChatHistoryEntry,
+  subscribeToChatHistory,
+  updateChatHistoryOutput,
+} from './chatHistory';
+import { uploadGeneratedImage } from './storage';
+import ChatHistoryPanel from './ChatHistoryPanel';
 
 const formattedBlogOutputFormats = ['Blog', 'Story', 'Comic'];
 const themeBasedOutputFormats = ['Story', 'Comic'];
+
+const makeHistoryTitle = (value, fallback) => (
+  value.trim().replace(/\s+/g, ' ').slice(0, 64) || fallback
+);
+
+const getHistoryBlogImages = (entry) => {
+  const prompts = Array.isArray(entry.output?.imagePrompts) ? entry.output.imagePrompts : [];
+  const storedImages = Array.isArray(entry.output?.imageUrls) ? entry.output.imageUrls : [];
+  const availableIndexes = new Set(storedImages.map((_, index) => index));
+
+  if (!prompts.length) return storedImages;
+  if (storedImages.length === prompts.length) return storedImages;
+
+  return prompts.map((prompt, promptIndex) => {
+    const alignedImage = storedImages[promptIndex];
+    if (alignedImage && alignedImage.prompt === prompt.prompt) {
+      availableIndexes.delete(promptIndex);
+      return alignedImage;
+    }
+
+    const matchingIndex = storedImages.findIndex((image, imageIndex) => (
+      availableIndexes.has(imageIndex)
+      && image
+      && image.prompt
+      && image.prompt === prompt.prompt
+    ));
+    if (matchingIndex < 0) return null;
+
+    availableIndexes.delete(matchingIndex);
+    return storedImages[matchingIndex];
+  });
+};
 
 const getAdjacentComicImageIndex = (images, currentIndex, direction) => {
   for (let step = 1; step <= images.length; step += 1) {
@@ -50,6 +90,40 @@ function Home() {
   const [blogContentLoaded, setBlogContentLoaded] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [historyEntries, setHistoryEntries] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState('');
+  const [historySaveError, setHistorySaveError] = useState('');
+  const [historySaveStatus, setHistorySaveStatus] = useState('');
+  const [selectedHistoryId, setSelectedHistoryId] = useState(null);
+  const [restoredHistoryEntry, setRestoredHistoryEntry] = useState(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  useEffect(() => {
+    const currentUser = auth?.currentUser;
+    if (!db || !currentUser) {
+      setHistoryError('Chat history is unavailable until your account and Firestore are ready.');
+      setHistoryLoading(false);
+      return undefined;
+    }
+
+    return subscribeToChatHistory(
+      currentUser.uid,
+      (entries) => {
+        setHistoryEntries(entries);
+        setRestoredHistoryEntry((currentEntry) => (
+          currentEntry ? entries.find((entry) => entry.id === currentEntry.id) || currentEntry : null
+        ));
+        setHistoryLoading(false);
+        setHistoryError('');
+      },
+      (error) => {
+        console.error('Failed to load chat history:', error);
+        setHistoryError('Chat history could not be loaded. Check your Firestore rules and connection.');
+        setHistoryLoading(false);
+      },
+    );
+  }, []);
 
   // Update blog content loaded state when output or blogOutputFormat changes
   useEffect(() => {
@@ -86,28 +160,193 @@ function Home() {
     };
   }, [focusedComicImageIndex, blogImages]);
 
+  const persistGeneration = async (generationMode, action, input, outputText, titleSource, outputDetails) => {
+    setHistorySaveError('');
+    setHistorySaveStatus('');
+    try {
+      const id = await saveChatHistoryEntry({
+        title: makeHistoryTitle(titleSource, `${action} ${generationMode.toLowerCase()}`),
+        mode: generationMode,
+        action,
+        input,
+        output: { text: outputText, ...outputDetails },
+      });
+      setSelectedHistoryId(id);
+      return id;
+    } catch (error) {
+      console.error('Failed to save chat history:', error);
+      setHistorySaveError(
+        'Your result is ready, but it could not be saved to chat history. Check your Firestore rules and connection.',
+      );
+      return null;
+    }
+  };
+
+  const persistGeneratedImages = async (entryId, generatedImages, outputText, imagePrompts) => {
+    if (!entryId || !generatedImages.length) return;
+
+    setHistorySaveStatus('Saving generated images to chat history…');
+    setHistorySaveError('');
+    const uploads = await Promise.allSettled(generatedImages.map((image) => (
+      image
+        ? uploadGeneratedImage(image.url, {
+          prompt: image.prompt || '',
+          caption: image.caption || '',
+        })
+        : Promise.resolve(null)
+    )));
+    const imageUrls = uploads.map((result) => (
+      result.status === 'fulfilled' ? result.value : null
+    ));
+    const savedImageCount = imageUrls.filter(Boolean).length;
+    const allImagesSaved = generatedImages.every(Boolean)
+      && uploads.every((result) => result.status === 'fulfilled' && result.value);
+
+    uploads.forEach((result) => {
+      if (result.status === 'rejected') {
+        console.error('Failed to save a generated image:', result.reason);
+      }
+    });
+
+    try {
+      await updateChatHistoryOutput(entryId, {
+        text: outputText,
+        imagePrompts,
+        imageUrls,
+        imageFilesStored: allImagesSaved,
+        imageFileStored: allImagesSaved && generatedImages.length === 1,
+      });
+      setHistorySaveStatus('');
+      if (!allImagesSaved) {
+        setHistorySaveError(
+          `${savedImageCount} of ${generatedImages.length} generated images were saved. Check the Supabase bucket and Storage policies.`,
+        );
+      }
+    } catch (error) {
+      console.error('Failed to link uploaded images to chat history:', error);
+      setHistorySaveStatus('');
+      setHistorySaveError(
+        'Images were uploaded, but their links could not be saved to chat history. Check your Firestore rules and connection.',
+      );
+    }
+  };
+
+  const handleNewChat = () => {
+    setHistoryOpen(false);
+    setSelectedHistoryId(null);
+    setRestoredHistoryEntry(null);
+    setHistorySaveError('');
+    setMode('Blog');
+    setText('');
+    setPlatform('Whatsapp');
+    setTone('Casual');
+    setWithe('With');
+    setLength('Normal');
+    setOutput('');
+    setTextMode('Generate');
+    setImagePrompt('');
+    setGeneratedImage('');
+    setImageModel('zimage');
+    setBlogTopic('');
+    setStoryThemes([]);
+    setIsCustomThemeSelected(false);
+    setCustomStoryTheme('');
+    setBlogLength('Medium');
+    setComicImageCount('4');
+    setCustomComicImageCount('4');
+    setBlogStyle('Informative');
+    setBlogOutputFormat('Blog');
+    setBlogImages([]);
+    setBlogImagesLoading([]);
+    setFocusedComicImageIndex(null);
+  };
+
+  const handleSelectHistoryEntry = (entry) => {
+    if (!entry?.input || !entry?.output || !['Blog', 'Text', 'Image'].includes(entry.mode)) {
+      console.error('Chat history entry has an unsupported format:', entry?.id);
+      setHistoryError('This history item could not be opened because its saved data is incomplete.');
+      return;
+    }
+
+    const input = entry.input;
+    const outputText = typeof entry.output === 'string' ? entry.output : entry.output.text;
+    if (typeof outputText !== 'string') {
+      console.error('Chat history entry has no saved output:', entry.id);
+      setHistoryError('This history item could not be opened because its saved output is missing.');
+      return;
+    }
+
+    setHistoryError('');
+    setHistorySaveError('');
+    setHistoryOpen(false);
+    setSelectedHistoryId(entry.id);
+    setRestoredHistoryEntry(entry);
+    setMode(entry.mode);
+    setOutput(outputText);
+    setGeneratedImage('');
+    setBlogImages([]);
+    setBlogImagesLoading([]);
+    setFocusedComicImageIndex(null);
+
+    if (entry.mode === 'Blog') {
+      const themes = Array.isArray(input.themes) ? input.themes : [];
+      const standardThemes = ['Sci-fi', 'Thriller', 'Drama', 'Comedy', 'Action', 'Adventure'];
+      setBlogTopic(input.topic || '');
+      setBlogOutputFormat(input.outputFormat || 'Blog');
+      setBlogLength(input.length || 'Medium');
+      setBlogStyle(input.style || 'Informative');
+      setStoryThemes(themes);
+      setIsCustomThemeSelected(
+        typeof input.isCustomThemeSelected === 'boolean'
+          ? input.isCustomThemeSelected
+          : themes.some((theme) => !standardThemes.includes(theme)),
+      );
+      setCustomStoryTheme(input.customThemeDraft || '');
+      setComicImageCount(input.imageCountSelection || '4');
+      setCustomComicImageCount(String(input.customImageCount || '4'));
+    } else if (entry.mode === 'Text') {
+      setText(input.text || '');
+      setTextMode(input.textMode || (entry.action === 'Format' ? 'Custom' : 'Generate'));
+      setPlatform(input.platform || 'Whatsapp');
+      setTone(input.tone || 'Casual');
+      setWithe(input.includeEmojis || input.withe || 'With');
+      setLength(input.length || 'Normal');
+    } else {
+      setImagePrompt(input.prompt || input.imagePrompt || '');
+      setImageModel(input.model || input.imageModel || 'zimage');
+    }
+  };
+
   const handleFormat = async () => {
+    const input = { text, platform, tone, includeEmojis: withe, length };
+    setRestoredHistoryEntry(null);
     setLoading(true);
     try {
       const result = await formatText(text, platform, tone, withe, length);
       setOutput(result);
+      setLoading(false);
+      void persistGeneration('Text', 'Format', input, result, text, {});
     } catch (err) {
       setOutput('❌ Error formatting text.');
       console.error(err);
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleGenerate = async () => {
+    const input = { text, textMode, platform, tone, includeEmojis: withe, length };
+    setRestoredHistoryEntry(null);
     setLoading(true);
     try {
       const result = await generateText(text, platform, tone, withe, length);
       setOutput(result);
+      setLoading(false);
+      void persistGeneration('Text', 'Generate', input, result, text, {});
     } catch (err) {
       setOutput('❌ Error generating text.');
       console.error(err);
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleCopyText = () => {
@@ -156,7 +395,27 @@ function Home() {
   };
 
   const handleGenerateImageCall = async () => {
-    await generateImage(imagePrompt, imageModel, setGeneratedImage, setOutput, setImageLoading);
+    const input = { prompt: imagePrompt, model: imageModel };
+    setRestoredHistoryEntry(null);
+    const imageUrl = await generateImage(imagePrompt, imageModel, setGeneratedImage, setOutput, setImageLoading);
+    if (imageUrl) {
+      const entryId = await persistGeneration(
+        'Image',
+        'Generate image',
+        input,
+        '✅ Image generated successfully!',
+        imagePrompt,
+        { imageFileStored: false },
+      );
+      if (entryId) {
+        await persistGeneratedImages(
+          entryId,
+          [{ url: imageUrl, prompt: imagePrompt, caption: imagePrompt }],
+          '✅ Image generated successfully!',
+          [],
+        );
+      }
+    }
   };
 
   const handleDownloadImageCall = async () => {
@@ -209,6 +468,7 @@ function Home() {
     }
 
     setBlogLoading(true);
+    setRestoredHistoryEntry(null);
     setBlogImages([]);
     setBlogImagesLoading([]);
     setFocusedComicImageIndex(null);
@@ -222,14 +482,52 @@ function Home() {
         selectedStoryTheme,
         requestedComicImageCount,
       );
-      setOutput(result.content || '');
+      const generatedContent = result.content || '';
+      setOutput(generatedContent);
+      const input = {
+        topic: blogTopic,
+        outputFormat: blogOutputFormat,
+        length: blogLength,
+        style: blogStyle,
+        themes: storyThemes,
+        customThemeDraft: customStoryTheme,
+        isCustomThemeSelected,
+        imageCountSelection: comicImageCount,
+        customImageCount: customComicImageCount,
+        requestedImageCount: requestedComicImageCount,
+      };
+      const imagePrompts = (result.images || []).map((image) => (
+        typeof image === 'string'
+          ? { prompt: image, caption: image }
+          : { prompt: image?.prompt || '', caption: image?.caption || '' }
+      ));
+      const imageGeneration = result.images?.length
+        ? generateBlogImages(result.images, setBlogImages, setBlogImagesLoading)
+        : Promise.resolve([]);
+      const historyEntryIdPromise = persistGeneration(
+        'Blog',
+        `Generate ${blogOutputFormat.toLowerCase()}`,
+        input,
+        generatedContent,
+        blogTopic,
+        { imagePrompts, imageFilesStored: false },
+      );
       
       if (result.images && result.images.length > 0) {
-      const imageGeneration = generateBlogImages(result.images, setBlogImages, setBlogImagesLoading);
-      if (blogOutputFormat === 'Comic' && !(await imageGeneration)) {
-        setOutput('❌ One or more comic panels could not be generated.');
+        void Promise.all([historyEntryIdPromise, imageGeneration]).then(([entryId, images]) => {
+          const successfulImages = images.filter(Boolean);
+          if (entryId && successfulImages.length) {
+            return persistGeneratedImages(entryId, successfulImages, generatedContent, imagePrompts);
+          }
+          return undefined;
+        });
+        if (blogOutputFormat === 'Comic') {
+          const images = await imageGeneration;
+          if (images.some((image) => !image)) {
+            setOutput('❌ One or more comic panels could not be generated.');
+          }
+        }
       }
-    }
     } catch (err) {
     setOutput(`❌ ${err.message || `Error generating ${blogOutputFormat.toLowerCase()}.`}`);
     console.error(err);
@@ -245,6 +543,7 @@ function Home() {
   const handleBlogOutputFormatChange = (outputFormat) => {
     setMode('Blog');
     setBlogOutputFormat(outputFormat);
+    setRestoredHistoryEntry(null);
     setOutput('');
     setBlogImages([]);
     setBlogImagesLoading([]);
@@ -258,21 +557,130 @@ function Home() {
     handleOpenInNewTab({ title, faviconHref });
   };
 
-  return (
-    <>
-    
+  const renderHistoryDetails = () => {
+    const entry = restoredHistoryEntry;
+    if (!entry) return null;
 
-      <div className="page">
+    const input = entry.input || {};
+    const savedOutput = typeof entry.output === 'string' ? entry.output : entry.output?.text || '';
+    const format = input.outputFormat || 'Blog';
+    const settings = entry.mode === 'Blog'
+      ? [
+        { label: 'Format', value: format },
+        ...(format === 'Blog' ? [{ label: 'Style', value: input.style }] : []),
+        ...(format !== 'Comic' ? [{ label: 'Length', value: input.length }] : []),
+        ...(format === 'Comic' ? [{ label: 'Images', value: input.requestedImageCount }] : []),
+        ...(format !== 'Blog' && Array.isArray(input.themes)
+          ? [{ label: 'Theme', value: input.themes.join(', ') }]
+          : []),
+      ]
+      : entry.mode === 'Text'
+        ? [
+          { label: 'Action', value: entry.action },
+          { label: 'Platform', value: input.platform },
+          { label: 'Tone', value: input.tone },
+          { label: 'Emojis', value: input.includeEmojis === 'With' || input.withe === 'With' ? 'Yes' : 'No' },
+          { label: 'Length', value: input.length },
+        ]
+        : [{ label: 'Model', value: input.model }];
+    const prompt = entry.mode === 'Blog'
+      ? input.topic
+      : entry.mode === 'Image'
+        ? input.prompt || input.imagePrompt
+        : input.text;
+    const imagePrompts = Array.isArray(entry.output?.imagePrompts) ? entry.output.imagePrompts : [];
+    const imageUrls = Array.isArray(entry.output?.imageUrls) ? entry.output.imageUrls : [];
+    const historyBlogImages = getHistoryBlogImages(entry);
+
+    return (
+      <section className="history-view" aria-label="Saved generation">
+        <div className="history-request">
+          <div className="history-kind">{entry.mode === 'Blog' ? format : entry.mode}</div>
+          <h2>{entry.mode === 'Image' ? 'Image prompt' : entry.mode === 'Blog' ? 'Topic' : 'Input'}</h2>
+          <p className="history-prompt">{prompt || 'No input was saved.'}</p>
+          <dl className="history-settings">
+            {settings.filter(({ value }) => value !== undefined && value !== '').map(({ label, value }) => (
+              <div className="history-setting" key={label}>
+                <dt>{label}</dt>
+                <dd>{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+
+        <div className="history-result">
+          <h2>Generated output</h2>
+          {entry.mode === 'Image' ? (
+            imageUrls.length ? (
+              <div className="history-saved-images">
+                {imageUrls.filter(Boolean).map((image, index) => (
+                  <img key={image.path || image.url} src={image.url} alt={`Generated artwork ${index + 1}`} />
+                ))}
+              </div>
+            ) : (
+              <p className="history-output-note">
+                The generated image is not available in this history entry.
+              </p>
+            )
+          ) : entry.mode === 'Blog' ? (
+            <div className="history-output">
+              {formatBlogContent(savedOutput, historyBlogImages)
+                || <p>No text output was saved for this generation.</p>}
+            </div>
+          ) : (
+            <p className="history-output history-output-plain">
+              {savedOutput || 'No text output was saved for this generation.'}
+            </p>
+          )}
+          {entry.mode === 'Blog' && imagePrompts.length > 0 && imageUrls.every((image) => !image) && (
+            <p className="history-output-note">Generated images could not be saved to storage.</p>
+          )}
+        </div>
+      </section>
+    );
+  };
+
+  return (
+    <div className="workspace-layout" id="top">
+      <ChatHistoryPanel
+        entries={historyEntries}
+        error={historyError}
+        isLoading={historyLoading}
+        isOpen={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        onNewChat={handleNewChat}
+        onSelect={handleSelectHistoryEntry}
+        selectedId={selectedHistoryId}
+        userLabel={auth?.currentUser?.email}
+      />
+      <div className="workspace-main">
+        <div className="workspace-mobile-bar">
+          <button type="button" onClick={() => setHistoryOpen(true)} aria-label="Open chat history">
+            <Menu size={17} />
+            History
+          </button>
+        </div>
+        {historySaveError && (
+          <p className="history-save-error" role="alert">{historySaveError}</p>
+        )}
+        {historySaveStatus && (
+          <p className="history-save-status" role="status">{historySaveStatus}</p>
+        )}
+        <div className="page">
         <div className="card" role="region" aria-label="Textify">
           <header className="workspace-heading">
             <span className="workspace-heading-mark"><FileText size={21} /></span>
             <div>
               <p className="workspace-eyebrow">Textify studio</p>
-              <h1>What would you like to create?</h1>
-              <p>Start with an idea and shape it into something worth sharing.</p>
+              <h1>{restoredHistoryEntry ? restoredHistoryEntry.title : 'What would you like to create?'}</h1>
+              <p>{restoredHistoryEntry
+                ? 'Saved generation · read-only'
+                : 'Start with an idea and shape it into something worth sharing.'}</p>
             </div>
           </header>
 
+          {restoredHistoryEntry ? renderHistoryDetails() : (
+            <>
           <div className="mode-toggle">
             <button
               className={blogOutputFormat === 'Blog' ? 'active' : ''}
@@ -560,7 +968,12 @@ function Home() {
                   
                 </div>
                   <div id='blogcontent' style={{ margin: 0, color: 'rgba(230,238,252,0.95)', fontSize: '14px' }}>
-                    {blogOutputFormat === 'Comic' ? null : formattedBlogOutputFormats.includes(blogOutputFormat) ? (
+                    {restoredHistoryEntry?.mode === 'Blog' ? (
+                      formatBlogContent(
+                        output,
+                        getHistoryBlogImages(restoredHistoryEntry),
+                      ) || <p>No text output was saved for this generation.</p>
+                    ) : blogOutputFormat === 'Comic' ? null : formattedBlogOutputFormats.includes(blogOutputFormat) ? (
                       formatBlogContentCall(output) || <p style={{ color: 'rgba(230,238,252,0.7)' }}>Your generated content will appear here.</p>
                     ) : (
                       <p style={{ margin: 0, whiteSpace: 'pre-wrap', color: 'rgba(230,238,252,0.95)', fontSize: '14px' }}>
@@ -569,7 +982,7 @@ function Home() {
                     )}
                   </div>
 
-                {blogOutputFormat === 'Comic' && output && (
+                {blogOutputFormat === 'Comic' && output && !restoredHistoryEntry && (
                   <p role="alert" style={{ color: '#fca5a5' }}>{output}</p>
                 )}
 
@@ -898,7 +1311,11 @@ function Home() {
             </div>
             {mode === 'Image' ? (
               <>
-                {generatedImage ? (
+                {restoredHistoryEntry?.mode === 'Image' ? (
+                  <p className="history-output-note">
+                    This image file was not saved. The prompt and model are available above.
+                  </p>
+                ) : generatedImage ? (
                   <div>
                     <div style={{ marginTop: '12px', borderRadius: '10px', overflow: 'hidden' }}>
                       <img src={generatedImage} alt="Generated" style={{ maxWidth: '100%', height: 'auto', display: 'block' }} />
@@ -928,9 +1345,12 @@ function Home() {
               </>
             )}
           </aside>
+            </>
+          )}
+        </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }
 

@@ -4,7 +4,7 @@ import { apiRequest } from '../apiClient';
 export const generateImage = async (imagePrompt, imageModel, setGeneratedImage, setOutput, setImageLoading) => {
   if (!imagePrompt.trim()) {
     setOutput('❌ Please enter an image prompt.');
-    return;
+    return null;
   }
   
   setImageLoading(true);
@@ -20,9 +20,11 @@ export const generateImage = async (imagePrompt, imageModel, setGeneratedImage, 
     const imageUrl = URL.createObjectURL(await response.blob());
     setGeneratedImage(imageUrl);
     setOutput('✅ Image generated successfully!');
+    return imageUrl;
   } catch (err) {
     setOutput(`❌ ${err.message || 'Error generating image.'}`);
     console.error(err);
+    return null;
   } finally {
     setImageLoading(false);
   }

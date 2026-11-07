@@ -19,6 +19,15 @@ Text generation, blog generation, image generation, and Pexels video search run 
 1. In Firebase Console, add a Web App to the existing Firebase project and enable Email/Password and Google under **Authentication → Sign-in method**.
 2. Add the web app configuration to a local `.env` file using [.env.example](./.env.example) as a template. Set `REACT_APP_API_BASE_URL` to the Worker URL after deploying it; use `http://127.0.0.1:8787` for local Worker development.
 3. Add the Firebase Hosting domains and any local development origins to `ALLOWED_ORIGINS` in [wrangler.jsonc](./wrangler.jsonc).
+4. Enable **Cloud Firestore** in the same project. Before deploying, merge any rules already used by other Firestore collections into [firestore.rules](./firestore.rules); Firebase deploys one ruleset for the whole database. Then deploy with `firebase deploy --only firestore:rules --project letstypifythecontent`.
+
+Textify saves each successful generation under the signed-in user's `users/{uid}/history` collection. The Firestore rules in [firestore.rules](./firestore.rules) restrict history access to that account. Inputs and generated text are stored in Firestore. Generated image files are uploaded to the public `textifybucket` Supabase Storage bucket, and their public URLs are saved in Firestore so they can be rendered when a history item is reopened. Anyone with an image URL can view that image.
+
+### Supabase image storage
+
+The Supabase URL and publishable key are configured as `REACT_APP_SUPABASE_URL` and `REACT_APP_SUPABASE_PUBLISHABLE_KEY` in `.env` before building the frontend. Publishable keys are intended for browser use; never use a Supabase secret or service-role key in the frontend.
+
+In Supabase Storage, create or select the `textifybucket` bucket and mark it **public**. Then run [supabase-storage-policies.sql](./supabase-storage-policies.sql) once in the Supabase SQL Editor. Its insert policy allows unauthenticated browser uploads to that bucket; anyone with the public key can upload files while declaring an allowed image MIME type, so the policy cannot prove that uploads came from Textify or enforce Firebase user ownership. Set an appropriate file-size limit in the dashboard and monitor usage. The bucket's public setting allows image reads by URL; no public read policy is needed.
 
 Firebase web app configuration values are intended to be public client configuration. The Worker validates Firebase ID tokens; it does not trust a client-supplied user ID.
 

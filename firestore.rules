@@ -1,0 +1,55 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId}/history/{entryId} {
+      function isOwner() {
+        return request.auth != null && request.auth.uid == userId;
+      }
+
+      function validOutput(output) {
+        return output is map
+          && output.keys().hasOnly([
+            'text',
+            'imagePrompts',
+            'imageFilesStored',
+            'imageFileStored',
+            'imageUrls'
+          ])
+          && output.keys().hasAll(['text'])
+          && output.text is string
+          && (!('imagePrompts' in output) || output.imagePrompts is list)
+          && (!('imageFilesStored' in output) || output.imageFilesStored is bool)
+          && (!('imageFileStored' in output) || output.imageFileStored is bool)
+          && (!('imageUrls' in output) || output.imageUrls is list);
+      }
+
+      allow read, delete: if isOwner();
+      allow create: if isOwner()
+        && request.resource.data.keys().hasOnly([
+          'title',
+          'mode',
+          'action',
+          'input',
+          'output',
+          'createdAt'
+        ])
+        && request.resource.data.keys().hasAll([
+          'title',
+          'mode',
+          'action',
+          'input',
+          'output',
+          'createdAt'
+        ])
+        && request.resource.data.title is string
+        && request.resource.data.mode in ['Blog', 'Text', 'Image']
+        && request.resource.data.action is string
+        && request.resource.data.input is map
+        && validOutput(request.resource.data.output);
+
+      allow update: if isOwner()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['output'])
+        && validOutput(request.resource.data.output);
+    }
+  }
+}

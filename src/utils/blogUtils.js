@@ -77,9 +77,9 @@ export const generateBlogImages = async (imagePrompts, setBlogImages, setBlogIma
         return updated;
       });
     }
-    return Boolean(imageUrl);
+    return imageUrl ? { url: imageUrl, prompt, caption } : null;
   }));
-  return results.every(Boolean);
+  return results;
 };
 
 // Format blog content with markdown-like syntax
@@ -93,30 +93,37 @@ export const formatBlogContent = (text, blogImages, onImageClick) => {
     if (imageMatch) {
       const imageNum = parseInt(imageMatch[1]) - 1;
       if (blogImages[imageNum] && blogImages[imageNum].url) {
+        const image = (
+          <img
+            src={blogImages[imageNum].url}
+            alt={`Image ${imageNum + 1}`}
+            style={{
+              maxWidth: '100%',
+              height: 'auto',
+              borderRadius: '8px',
+              border: '1px solid rgba(255,255,255,0.1)',
+              maxHeight: '400px',
+            }}
+          />
+        );
         return (
           // eslint-disable-next-line react/jsx-no-comment-textnodes
           <div key={index} style={{ margin: '16px 0', textAlign: 'center' }}>
-            <button
-              type="button"
-              className="comic-page-thumbnail"
-              onClick={() => onImageClick?.(imageNum)}
-              aria-label={`Enlarge image ${imageNum + 1}`}
-            >
-              <img 
-                src={blogImages[imageNum].url} 
-                alt={blogImages[imageNum].caption || blogImages[imageNum].prompt || `Image ${imageNum + 1}`}
-                style={{ 
-                  maxWidth: '100%', 
-                  height: 'auto', 
-                  borderRadius: '8px',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  maxHeight: '400px'
-                }} 
-              />
-            </button>
-             <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: 'rgba(230,238,252,0.6)' }}>
-               {blogImages[imageNum].caption || blogImages[imageNum].prompt || `Image ${imageNum + 1}`}
-             </p>
+            {onImageClick ? (
+              <button
+                type="button"
+                className="comic-page-thumbnail"
+                onClick={() => onImageClick(imageNum)}
+                aria-label={`Enlarge image ${imageNum + 1}`}
+              >
+                {image}
+              </button>
+            ) : image}
+            {onImageClick && (
+              <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: 'rgba(230,238,252,0.6)' }}>
+                {blogImages[imageNum].caption || blogImages[imageNum].prompt || `Image ${imageNum + 1}`}
+              </p>
+            )}
           </div>
         );
       } else {

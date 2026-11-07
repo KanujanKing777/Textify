@@ -657,7 +657,6 @@ function Home() {
         <div className="workspace-mobile-bar">
           <button type="button" onClick={() => setHistoryOpen(true)} aria-label="Open chat history">
             <Menu size={17} />
-            History
           </button>
         </div>
         {historySaveError && (

@@ -1,37 +1,24 @@
 # Textify
 
-Textify is an AI content studio for turning ideas into polished content. It helps users create blog posts, stories, comics, and generated visuals in a single workflow.
+Textify is an AI content studio for creating illustrated blog posts, stories, comics, standalone images, and social copy.
 
 ## What Textify does
 
-- Generate blog content from a topic or idea
-- Create story-based content with themes and narrative structure
-- Build comic-style output with multiple scenes and image prompts
-- Generate custom images from text prompts
-- Format and rewrite text for different channels and tones
-- Save generation history for signed-in users
+| Mode | Available controls and output |
+| --- | --- |
+| **Blog** | Start with a topic, choose a length and writing style, and generate a formatted article with illustrations and captions. |
+| **Story** | Start with an idea, choose a length, and combine preset and custom themes to generate an illustrated story with chapters. |
+| **Comic** | Choose themes and generate 1 to 32 illustrated pages. Open a page in the enlarged viewer and browse the sequence. |
+| **Text** | Generate copy from a prompt or format existing text for WhatsApp, Discord, Instagram, or Twitter. Formatting controls include tone, emoji use, and length. |
+| **Image** | Generate a standalone image from a prompt, choose an image model, and download the result. |
 
-## Product overview
+You can copy generated text, listen to blog and story output with browser text-to-speech, and open formatted blog and story output in a new tab.
 
-Textify combines a React frontend with a Cloudflare Worker backend. The app uses Firebase for authentication and app configuration, Firestore for saved user history, and Supabase Storage for generated image files.
+Generation requires an account. Sign in with email and password or Google. The history panel lets you reopen prior generations and see their saved inputs, settings, output, and any images saved to storage.
 
 ## Tech stack
 
-- Frontend: React
-- Auth/config: Firebase
-- Backend APIs: Cloudflare Worker
-- Datastore: Firestore
-- Image storage: Supabase Storage
-- AI providers: Gemini and Pollinations
-
-## Features in the app
-
-- Multi-format content generation: Blog, Story, Comic
-- Text formatting and generation for social and marketing use cases
-- Image generation with prompt-based creation
-- Copy and read-aloud functionality for generated output
-- History panel for revisiting saved work
-- User sign-in and account-based generation storage
+The frontend uses React and Vite. A Cloudflare Worker calls Gemini for text and Pollinations for images. Firebase Authentication handles sign-in, Firestore stores generation history, and Supabase Storage holds saved images.
 
 ## Local setup
 
@@ -87,12 +74,11 @@ npm run worker:dev
 npm run worker:deploy
 ```
 
-Set the required secrets in Cloudflare:
+Set the generation secrets in Cloudflare:
 
 ```bash
 npx wrangler secret put GEMINI_API_KEY
 npx wrangler secret put POLLINATIONS_API_KEY
-npx wrangler secret put PEXELS_API_KEY
 ```
 
 Then update `REACT_APP_API_BASE_URL` to the deployed Worker URL and rebuild/redeploy the frontend.

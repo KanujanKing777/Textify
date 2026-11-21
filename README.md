@@ -14,7 +14,7 @@ Textify is an AI content studio for creating illustrated blog posts, stories, co
 
 You can copy generated text, listen to blog and story output with browser text-to-speech, and open formatted blog and story output in a new tab.
 
-Generation requires an account. Sign in with email and password or Google. The history panel lets you reopen prior generations and see their saved inputs, settings, output, and any images saved to storage.
+Select **Try now** to generate two blogs, two stories, and two comics per browser without signing in. The Worker tracks each format’s quota in a Cloudflare Durable Object. Text, standalone Image, and saved history require an account. Sign in with email and password or Google to reopen prior generations and see their saved inputs, settings, output, and stored images.
 
 ## Tech stack
 
@@ -69,6 +69,8 @@ npm run worker:dev
 ## Deployment
 
 ### Deploy the Worker
+
+Deploy the Worker before the updated frontend so the guest session endpoints and Durable Object migration are live when visitors select **Try now**.
 
 ```bash
 npm run worker:deploy

@@ -59,7 +59,8 @@ const getAdjacentComicImageIndex = (images, currentIndex, direction) => {
   return currentIndex;
 };
 
-function Home() {
+function Home({ guestSession, onCreateAccount }) {
+  const guestToken = guestSession?.token;
   const [text, setText] = useState('');
   const [platform, setPlatform] = useState('Whatsapp');
   const [tone, setTone] = useState('Casual');
@@ -99,8 +100,10 @@ function Home() {
   const [restoredHistoryEntry, setRestoredHistoryEntry] = useState(null);
   const [signedHistoryImages, setSignedHistoryImages] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [guestExhausted, setGuestExhausted] = useState(() => guestSession?.exhausted ?? {});
 
   useEffect(() => {
+    if (guestToken) return undefined;
     const currentUser = auth?.currentUser;
     if (!db || !currentUser) {
       setHistoryError('Chat history is unavailable until your account and Firestore are ready.');
@@ -124,7 +127,7 @@ function Home() {
         setHistoryLoading(false);
       },
     );
-  }, []);
+  }, [guestToken]);
 
   useEffect(() => {
     const entry = restoredHistoryEntry;
@@ -184,6 +187,7 @@ function Home() {
   }, [focusedComicImageIndex, blogImages]);
 
   const persistGeneration = async (generationMode, action, input, outputText, titleSource, outputDetails) => {
+    if (guestToken) return null;
     setHistorySaveError('');
     setHistorySaveStatus('');
     try {
@@ -471,6 +475,7 @@ function Home() {
   };
 
   const handleGenerateBlogCall = async () => {
+    const format = blogOutputFormat;
     if (!blogTopic.trim()) {
       setOutput(`❌ Please enter a ${blogOutputFormat === 'Story' ? 'story idea' : blogOutputFormat === 'Comic' ? 'comic idea' : 'blog topic'}.`);
       return;
@@ -504,7 +509,11 @@ function Home() {
         blogOutputFormat,
         selectedStoryTheme,
         requestedComicImageCount,
+        guestToken,
       );
+      if (result.guestRemaining === 0) {
+        setGuestExhausted((previous) => ({ ...previous, [format]: true }));
+      }
       const generatedContent = result.content || '';
       setOutput(generatedContent);
       const input = {
@@ -525,7 +534,8 @@ function Home() {
           : { prompt: image?.prompt || '', caption: image?.caption || '' }
       ));
       const imageGeneration = result.images?.length
-        ? generateBlogImages(result.images, setBlogImages, setBlogImagesLoading)
+        ? generateBlogImages(result.images, setBlogImages, setBlogImagesLoading,
+          guestToken ? { token: guestToken, id: result.guestGenerationId } : undefined)
         : Promise.resolve([]);
       const historyEntryIdPromise = persistGeneration(
         'Blog',
@@ -544,16 +554,19 @@ function Home() {
           }
           return undefined;
         });
-        if (blogOutputFormat === 'Comic') {
+        if (guestToken || blogOutputFormat === 'Comic') {
           const images = await imageGeneration;
-          if (images.some((image) => !image)) {
+          if (blogOutputFormat === 'Comic' && images.some((image) => !image)) {
             setOutput('❌ One or more comic panels could not be generated.');
           }
         }
       }
     } catch (err) {
-    setOutput(`❌ ${err.message || `Error generating ${blogOutputFormat.toLowerCase()}.`}`);
-    console.error(err);
+      if (err.code === 'GUEST_LIMIT') {
+        setGuestExhausted((previous) => ({ ...previous, [format]: true }));
+      }
+      setOutput(`❌ ${err.message || `Error generating ${format.toLowerCase()}.`}`);
+      console.error(err);
     }
     setBlogLoading(false);
   };
@@ -674,7 +687,7 @@ function Home() {
 
   return (
     <div className="workspace-layout" id="top">
-      <ChatHistoryPanel
+      {!guestToken && <ChatHistoryPanel
         entries={historyEntries}
         error={historyError}
         isLoading={historyLoading}
@@ -684,13 +697,13 @@ function Home() {
         onSelect={handleSelectHistoryEntry}
         selectedId={selectedHistoryId}
         userLabel={auth?.currentUser?.email}
-      />
+      />}
       <div className="workspace-main">
-        <div className="workspace-mobile-bar">
+        {!guestToken && <div className="workspace-mobile-bar">
           <button type="button" onClick={() => setHistoryOpen(true)} aria-label="Open chat history">
             <Menu size={17} />
           </button>
-        </div>
+        </div>}
         {historySaveError && (
           <p className="history-save-error" role="alert">{historySaveError}</p>
         )}
@@ -709,6 +722,16 @@ function Home() {
                 : 'Start with an idea and shape it into something worth sharing.'}</p>
             </div>
           </header>
+          {guestToken && (
+            <div className="guest-trial">
+              <p role="status">
+                {guestExhausted[blogOutputFormat]
+                  ? `You’ve used both guest ${blogOutputFormat.toLowerCase()} generations.`
+                  : 'Guest trial includes two generations each for Blog, Story, and Comic.'}
+              </p>
+              <button type="button" className="btn" onClick={onCreateAccount}>Create an account</button>
+            </div>
+          )}
 
           {restoredHistoryEntry ? renderHistoryDetails() : (
             <>
@@ -717,6 +740,7 @@ function Home() {
               className={blogOutputFormat === 'Blog' ? 'active' : ''}
               aria-pressed={blogOutputFormat === 'Blog'}
               onClick={() => handleBlogOutputFormatChange('Blog')}
+              disabled={Boolean(guestToken && blogLoading)}
             >
               Blog
             </button>
@@ -724,6 +748,7 @@ function Home() {
               className={blogOutputFormat === 'Story' ? 'active' : ''}
               aria-pressed={blogOutputFormat === 'Story'}
               onClick={() => handleBlogOutputFormatChange('Story')}
+              disabled={Boolean(guestToken && blogLoading)}
             >
               Story
             </button>
@@ -731,6 +756,7 @@ function Home() {
               className={blogOutputFormat === 'Comic' ? 'active' : ''}
               aria-pressed={blogOutputFormat === 'Comic'}
               onClick={() => handleBlogOutputFormatChange('Comic')}
+              disabled={Boolean(guestToken && blogLoading)}
             >
               Comic
             </button>
@@ -900,7 +926,8 @@ function Home() {
                 </div>
 
                 <div className="actions">
-                  <button onClick={handleGenerateBlogCall} className="btn" disabled={blogLoading}>
+                  <button onClick={handleGenerateBlogCall} className="btn"
+                    disabled={blogLoading || guestExhausted[blogOutputFormat]}>
                     {blogLoading ? 'Generating…' : 'Generate'}
                   </button>
                 </div>

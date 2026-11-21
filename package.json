@@ -16,7 +16,7 @@
     "test": "vitest run",
     "worker:dev": "wrangler dev",
     "worker:deploy": "wrangler deploy",
-    "test:security": "node --test workers/api/security.test.mjs tests/storage.security.test.mjs"
+    "test:security": "node --test workers/api/security.test.mjs tests/storage.security.test.mjs tests/guest.security.test.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.17",

@@ -21,7 +21,7 @@ export async function generateText(text, platform, tone, withe) {
   return result.text || '';
 }
 
-export async function generateBlog(topic, length, style, outputFormat = 'Blog', theme = '', imageCount) {
+export async function generateBlog(topic, length, style, outputFormat = 'Blog', theme = '', imageCount, guestToken) {
   const request = { topic, length, outputFormat, theme };
   if (outputFormat !== 'Story' && outputFormat !== 'Comic') {
     request.style = style;
@@ -29,5 +29,5 @@ export async function generateBlog(topic, length, style, outputFormat = 'Blog', 
   if (outputFormat === 'Comic') {
     request.imageCount = imageCount;
   }
-  return apiPostJson('/api/blog/generate', request);
+  return apiPostJson('/api/blog/generate', request, guestToken);
 }

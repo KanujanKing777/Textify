@@ -3,7 +3,7 @@ import React from 'react';
 import { apiRequest } from '../apiClient';
 
 // Generate images for blog with multiple model fallbacks
-export const generateBlogImages = async (imagePrompts, setBlogImages, setBlogImagesLoading) => {
+export const generateBlogImages = async (imagePrompts, setBlogImages, setBlogImagesLoading, guest) => {
   const modelsToTry = ['nanobanana-pro', 'nanobanana', 'gptimage', 'kontext'];
   
   if (!imagePrompts || imagePrompts.length === 0) return;
@@ -27,8 +27,9 @@ export const generateBlogImages = async (imagePrompts, setBlogImages, setBlogIma
             body: JSON.stringify({
               prompt: prompt.trim(),
               model,
+              ...(guest && { guestGenerationId: guest.id, guestImageIndex: promptIndex }),
             }),
-          });
+          }, guest?.token);
           imageUrl = URL.createObjectURL(await response.blob());
           break;
         } catch (modelErr) {
@@ -46,8 +47,9 @@ export const generateBlogImages = async (imagePrompts, setBlogImages, setBlogIma
           body: JSON.stringify({
             prompt: prompt.trim(),
             model: 'zimage',
+            ...(guest && { guestGenerationId: guest.id, guestImageIndex: promptIndex }),
           }),
-        });
+        }, guest?.token);
         imageUrl = URL.createObjectURL(await response.blob());
       } catch (modelErr) {
         lastError = modelErr;

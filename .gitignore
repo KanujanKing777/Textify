@@ -19,6 +19,7 @@
 !/workers/api/
 /workers/api/*
 !/workers/api/index.js
+!/workers/api/guest.js
 !/workers/api/security.test.mjs
 /.firebase/
 firebase-debug.log*

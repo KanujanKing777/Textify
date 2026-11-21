@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import AuthScreen from './AuthScreen';
-import { apiBaseUrl } from './apiClient';
+import { apiBaseUrl, getGuestSession } from './apiClient';
 import { auth, firebaseConfigError } from './firebase';
 import Home from './Home';
 import './AuthScreen.css';
@@ -13,6 +13,26 @@ function App() {
   const [authReady, setAuthReady] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
   const [isRegistering, setIsRegistering] = useState(true);
+  const [guestSession, setGuestSession] = useState(null);
+  const [guestLoading, setGuestLoading] = useState(false);
+  const [guestError, setGuestError] = useState('');
+
+  const createAccount = () => {
+    setIsRegistering(true);
+    setShowAuth(true);
+  };
+
+  const startGuest = async () => {
+    setGuestLoading(true);
+    setGuestError('');
+    try {
+      setGuestSession(await getGuestSession());
+    } catch (error) {
+      setGuestError(error.message);
+    } finally {
+      setGuestLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!auth) return undefined;
@@ -51,12 +71,14 @@ function App() {
         initialIsRegistering={isRegistering}
         onBack={() => setShowAuth(false)}
       />
+    ) : guestSession ? (
+      <Home guestSession={guestSession} onCreateAccount={createAccount} />
     ) : (
       <LandingPage
-        onCreateAccount={() => {
-          setIsRegistering(true);
-          setShowAuth(true);
-        }}
+        onCreateAccount={createAccount}
+        onTryNow={startGuest}
+        guestLoading={guestLoading}
+        guestError={guestError}
         onSignIn={() => {
           setIsRegistering(false);
           setShowAuth(true);

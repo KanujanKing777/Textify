@@ -3,6 +3,10 @@
   "name": "textify-api",
   "main": "workers/api/index.js",
   "compatibility_date": "2026-11-02",
+  "durable_objects": {
+    "bindings": [{ "name": "GUEST_SESSIONS", "class_name": "GuestSession" }]
+  },
+  "migrations": [{ "tag": "guest-v1", "new_sqlite_classes": ["GuestSession"] }],
   "ratelimits": [
     { "name": "IP_RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 180, "period": 60 } },
     { "name": "USER_RATE_LIMITER", "namespace_id": "1002", "simple": { "limit": 45, "period": 60 } }

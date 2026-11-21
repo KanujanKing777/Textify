@@ -1,3 +1,6 @@
+import { GUEST_FORMATS, guestSessionRequest } from './guest.js';
+export { GuestSession } from './guest.js';
+
 const GEMINI_MODEL = 'gemini-3.5-flash-lite';
 const POLLINATIONS_IMAGE_URL = 'https://gen.pollinations.ai/image/';
 const PEXELS_VIDEO_URL = 'https://api.pexels.com/videos/search';
@@ -48,19 +51,30 @@ export default {
     };
     const handler = Object.hasOwn(handlers, path) ? handlers[path] : undefined;
 
-    if (request.method !== 'POST' || !handler) {
+    if (request.method !== 'POST' || (!handler && path !== '/api/guest/session')) {
       return jsonResponse({ error: 'Not found.' }, 404, corsHeaders);
     }
 
     try {
       await enforceLimit(env.IP_RATE_LIMITER, request.headers.get('CF-Connecting-IP') || 'unknown');
-      const uid = await verifyFirebaseToken(request, env);
-      await enforceLimit(env.USER_RATE_LIMITER, uid);
+      const guest = /^Guest ([a-f0-9]{64})$/.exec(request.headers.get('Authorization') || '');
+      if (path === '/api/guest/session') {
+        const id = guest ? getGuestSessionId(env, guest[1]) : env.GUEST_SESSIONS.newUniqueId();
+        const usage = await guestSessionRequest(env.GUEST_SESSIONS.get(id), guest ? 'status' : 'create');
+        return jsonResponse({ token: id.toString(), ...usage }, guest ? 200 : 201, corsHeaders);
+      }
+      if (guest && !['/api/blog/generate', '/api/image/generate'].includes(path)) {
+        throw httpError('Sign in to use this feature.', 403);
+      }
+      const uid = guest ? guest[1] : await verifyFirebaseToken(request, env);
+      await enforceLimit(env.USER_RATE_LIMITER, guest ? `guest:${uid}` : uid);
       const body = await readJsonBody(request);
       if (!body || typeof body !== 'object' || Array.isArray(body)) {
         throw httpError('Request body must be a JSON object.', 400);
       }
-      const result = await handler(body, env);
+      const result = guest
+        ? await processGuestRequest(path, body, env, uid)
+        : await handler(body, env);
       return result instanceof Response
         ? addCorsHeaders(result, corsHeaders)
         : jsonResponse(result, 200, corsHeaders);
@@ -68,13 +82,56 @@ export default {
       const status = error.status || 500;
       if (status >= 500) console.error('API request failed', { path, status, error: error.name });
       return jsonResponse(
-        { error: status < 500 ? error.message : 'The requested processing failed.' },
+        { error: status < 500 ? error.message : 'The requested processing failed.', code: error.code === 'GUEST_LIMIT' ? error.code : undefined },
         status,
         corsHeaders,
       );
     }
   },
 };
+
+function getGuestSessionId(env, token) {
+  try {
+    return env.GUEST_SESSIONS.idFromString(token);
+  } catch {
+    throw httpError('Guest session is invalid.', 401);
+  }
+}
+
+async function processGuestRequest(path, body, env, token) {
+  const session = env.GUEST_SESSIONS.get(getGuestSessionId(env, token));
+  if (path === '/api/image/generate') {
+    const { guestGenerationId: generationId, guestImageIndex: index } = body;
+    if (typeof generationId !== 'string' || !/^[a-f0-9-]{36}$/.test(generationId)
+      || !Number.isSafeInteger(index) || index < 0) {
+      throw httpError('A guest illustration must belong to a generation.', 403);
+    }
+    const { prompt, attempt } = await guestSessionRequest(session, 'image', { generationId, index });
+    let response;
+    try {
+      response = await generateImage({ prompt, model: body.model }, env);
+      return response;
+    } finally {
+      await guestSessionRequest(session, 'image-finish', {
+        generationId, index, attempt, success: Boolean(response),
+      });
+    }
+  }
+
+  const format = body.outputFormat ?? 'Blog';
+  validateBlogRequest(body, format);
+  const generationId = crypto.randomUUID();
+  await guestSessionRequest(session, 'reserve', { format, generationId });
+  try {
+    const result = await generateBlog(body, env);
+    const prompts = result.images.map((image) => image.prompt);
+    const { remaining } = await guestSessionRequest(session, 'complete', { generationId, prompts });
+    return { ...result, guestGenerationId: generationId, guestRemaining: remaining };
+  } catch (error) {
+    await guestSessionRequest(session, 'refund', { generationId });
+    throw error;
+  }
+}
 
 async function enforceLimit(limiter, key) {
   if (!(await limiter.limit({ key })).success) {
@@ -128,18 +185,23 @@ async function generateText(body, env) {
   return { text: await generateGemini(`${body.text}\nI want only the generated text as output not anything else`, env) };
 }
 
-async function generateBlog(body, env) {
-  const { topic, length, style, theme } = body;
-  const outputFormat = body.outputFormat || 'Blog';
+function validateBlogRequest(body, outputFormat) {
+  if (!GUEST_FORMATS.includes(outputFormat)) throw httpError('Unsupported output format.', 400);
+  const { topic, theme, imageCount } = body;
   requireText(topic, 'topic');
   if (outputFormat === 'Story' || outputFormat === 'Comic') {
     requireText(theme, 'theme');
   }
+  if (outputFormat === 'Comic' && (!Number.isInteger(imageCount) || imageCount < 1 || imageCount > 32)) {
+    throw httpError('Comic image count must be a whole number between 1 and 32.', 400);
+  }
+}
+
+async function generateBlog(body, env) {
+  const { topic, length, style, theme, imageCount } = body;
+  const outputFormat = body.outputFormat ?? 'Blog';
+  validateBlogRequest(body, outputFormat);
   if (outputFormat === 'Comic') {
-    const imageCount = body.imageCount;
-    if (!Number.isInteger(imageCount) || imageCount < 1 || imageCount > 32) {
-      throw httpError('Comic image count must be a whole number between 1 and 32.', 400);
-    }
     const MAX_LETTERING_ITEMS = 1;   // fewer text items = far fewer garbled words
     const MAX_WORDS_PER_ITEM = 8;
 

@@ -33,7 +33,7 @@ const features = [
   },
 ];
 
-function LandingPage({ onCreateAccount, onSignIn }) {
+function LandingPage({ onCreateAccount, onSignIn, onTryNow, guestLoading, guestError }) {
   return (
     <div className="landing-page">
       <header className="landing-header">
@@ -62,15 +62,16 @@ function LandingPage({ onCreateAccount, onSignIn }) {
               Create blogs, stories, and comics from your ideas. Textify brings writing and visuals together in one inspiring place.
             </p>
             <div className="hero-actions">
-              <button className="primary-cta" type="button" onClick={onCreateAccount}>
-                Create your account <ArrowRight size={18} />
+              <button className="primary-cta" type="button" onClick={onTryNow} disabled={guestLoading}>
+                {guestLoading ? 'Opening studio…' : 'Try now'} <ArrowRight size={18} />
               </button>
               <a className="secondary-cta" href="#features">Explore the studio <ArrowDown size={16} /></a>
             </div>
             <div className="hero-note">
               <span className="note-check"><Check size={13} /></span>
-              Your creative space is just a few clicks away
+              Try two blogs, two stories, and two comics without an account.
             </div>
+            {guestError && <p role="alert">{guestError}</p>}
           </div>
 
           <div className="hero-art" aria-label="Preview of the Textify creative workspace">

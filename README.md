@@ -1,70 +1,129 @@
 # Textify
 
-**Textify** is an AI-powered, ready-to-publish content generator.  
+Textify is an AI content studio for turning ideas into polished content. It helps users create blog posts, stories, comics, and generated visuals in a single workflow.
 
-It can generate content in multiple formats, including:  
-- Blog posts  
-- Image creation
-- PDFs  
-- And more  
+## What Textify does
 
-Leverage **Textify** to create high-quality, formatted content instantly, saving time and effort.
+- Generate blog content from a topic or idea
+- Create story-based content with themes and narrative structure
+- Build comic-style output with multiple scenes and image prompts
+- Generate custom images from text prompts
+- Format and rewrite text for different channels and tones
+- Save generation history for signed-in users
 
-## Backend and authentication
+## Product overview
 
-Text generation, blog generation, image generation, and Pexels video search run through a Cloudflare Worker. Provider API keys are server-side Worker secrets and must not be added to `REACT_APP_*` variables or committed to the repository. The frontend remains hosted on Firebase Hosting.
+Textify combines a React frontend with a Cloudflare Worker backend. The app uses Firebase for authentication and app configuration, Firestore for saved user history, and Supabase Storage for generated image files.
 
-### Firebase web app setup
+## Tech stack
 
-1. In Firebase Console, add a Web App to the existing Firebase project and enable Email/Password and Google under **Authentication → Sign-in method**.
-2. Add the web app configuration to a local `.env` file using [.env.example](./.env.example) as a template. Set `REACT_APP_API_BASE_URL` to the Worker URL after deploying it; use `http://127.0.0.1:8787` for local Worker development.
-3. Add the Firebase Hosting domains and any local development origins to `ALLOWED_ORIGINS` in [wrangler.jsonc](./wrangler.jsonc).
-4. Enable **Cloud Firestore** in the same project. Before deploying, merge any rules already used by other Firestore collections into [firestore.rules](./firestore.rules); Firebase deploys one ruleset for the whole database. Then deploy with `firebase deploy --only firestore:rules --project letstypifythecontent`.
+- Frontend: React
+- Auth/config: Firebase
+- Backend APIs: Cloudflare Worker
+- Datastore: Firestore
+- Image storage: Supabase Storage
+- AI providers: Gemini and Pollinations
 
-Textify saves each successful generation under the signed-in user's `users/{uid}/history` collection. The Firestore rules in [firestore.rules](./firestore.rules) restrict history access to that account. Inputs and generated text are stored in Firestore. Generated image files are uploaded to the public `textifybucket` Supabase Storage bucket, and their public URLs are saved in Firestore so they can be rendered when a history item is reopened. Anyone with an image URL can view that image.
+## Features in the app
 
-### Supabase image storage
+- Multi-format content generation: Blog, Story, Comic
+- Text formatting and generation for social and marketing use cases
+- Image generation with prompt-based creation
+- Copy and read-aloud functionality for generated output
+- History panel for revisiting saved work
+- User sign-in and account-based generation storage
 
-The Supabase URL and publishable key are configured as `REACT_APP_SUPABASE_URL` and `REACT_APP_SUPABASE_PUBLISHABLE_KEY` in `.env` before building the frontend. Publishable keys are intended for browser use; never use a Supabase secret or service-role key in the frontend.
+## Local setup
 
-In Supabase Storage, create or select the `textifybucket` bucket and mark it **public**. Then run [supabase-storage-policies.sql](./supabase-storage-policies.sql) once in the Supabase SQL Editor. Its insert policy allows unauthenticated browser uploads to that bucket; anyone with the public key can upload files while declaring an allowed image MIME type, so the policy cannot prove that uploads came from Textify or enforce Firebase user ownership. Set an appropriate file-size limit in the dashboard and monitor usage. The bucket's public setting allows image reads by URL; no public read policy is needed.
+### 1. Install dependencies
 
-Firebase web app configuration values are intended to be public client configuration. The Worker validates Firebase ID tokens; it does not trust a client-supplied user ID.
+Use Node 22.13 or newer on a supported LTS line.
 
-### Run the Worker locally
-
-Install dependencies, then run:
-
-```sh
-npm run worker:dev
+```bash
+npm ci
 ```
 
-For local development, copy [.dev.vars.example](./.dev.vars.example) to `.dev.vars` and fill in newly issued provider keys. `.dev.vars` is ignored by Git:
+### 2. Configure environment variables
 
-```sh
+Create a local `.env` file using [.env.example](./.env.example) as the template.
+
+Required frontend variables include:
+
+- `REACT_APP_FIREBASE_API_KEY`
+- `REACT_APP_FIREBASE_AUTH_DOMAIN`
+- `REACT_APP_FIREBASE_PROJECT_ID`
+- `REACT_APP_FIREBASE_APP_ID`
+- `REACT_APP_API_BASE_URL`
+- `REACT_APP_SUPABASE_URL`
+- `REACT_APP_SUPABASE_PUBLISHABLE_KEY`
+
+For local development with Wrangler, set `REACT_APP_API_BASE_URL=http://127.0.0.1:8787` in `.env.development.local`.
+
+### 3. Run the frontend
+
+```bash
+npm start
+```
+
+### 4. Run the Worker locally
+
+Copy [.dev.vars.example](./.dev.vars.example) to `.dev.vars` and add your provider keys.
+
+```bash
 Copy-Item .dev.vars.example .dev.vars
 ```
 
-`FIREBASE_PROJECT_ID` is configured in `wrangler.jsonc` and must match the Firebase project used by the frontend. The `ALLOWED_ORIGINS` value must include the exact frontend origin(s).
+Then start the Worker:
+
+```bash
+npm run worker:dev
+```
+
+## Deployment
 
 ### Deploy the Worker
 
-After signing in to Cloudflare and linking this project to the intended account, deploy the Worker:
-
-```sh
+```bash
 npm run worker:deploy
 ```
 
-Set the provider secrets in the target Cloudflare environment:
+Set the required secrets in Cloudflare:
 
-```sh
+```bash
 npx wrangler secret put GEMINI_API_KEY
 npx wrangler secret put POLLINATIONS_API_KEY
 npx wrangler secret put PEXELS_API_KEY
 ```
 
-Then set `REACT_APP_API_BASE_URL` to the deployed Worker URL and rebuild/redeploy the Firebase frontend.
+Then update `REACT_APP_API_BASE_URL` to the deployed Worker URL and rebuild/redeploy the frontend.
 
-### Credential rotation
+## Firebase and storage setup
 
-Any provider keys previously placed in frontend source, build output, or shared files should be revoked and replaced in their provider consoles. Do not reuse those exposed values as Worker secrets. Configure only newly issued keys with Wrangler.
+- Enable Firebase Authentication for the web app
+- Enable Firestore for user history storage
+- Configure allowed frontend origins in [wrangler.jsonc](./wrangler.jsonc)
+- Create the `textifybucket` bucket in Supabase and run [the storage policy migration](./supabase-storage-policies.sql). It makes the bucket private, caps images at 8 MiB, and limits access to the Firebase owner. History entries saved by Textify retain their object paths, which the frontend uses to request short-lived signed URLs. Previously cached public copies can persist until their cache entries expire.
+- Enable [the Firebase Auth integration](https://supabase.com/docs/guides/auth/third-party/firebase-auth) in Supabase. Assign `role: 'authenticated'` to existing users and configure trusted server-side provisioning of that claim for new users. The claim needs to be in the Firebase ID token before the user's first image save. Keep custom claim credentials server-side.
+- Have users with older ID tokens sign in again after claim provisioning.
+- Keep the Firebase project ID aligned across the frontend environment, Worker configuration, hosting target, and storage policy. Update the Hosting content security policy if you use a custom Worker, Firebase Auth, or Supabase domain.
+
+## Release checks
+
+```bash
+npm ci
+npm test
+npm run test:security
+npm audit --audit-level=low
+npm run build
+npm run worker:deploy -- --dry-run
+firebase emulators:exec --only firestore,hosting --project demo-textify "node --test tests/firestore.security.test.mjs tests/hosting.security.test.mjs"
+```
+
+Verify the deployment in a staging project with two accounts. Confirm that each account can save and reload its own history and images, Firestore rejects the other account's history, and Supabase rejects anonymous and cross-account reads and uploads. Verify email/password and Google login under the deployed Hosting headers. Check Cloudflare's rate limit binding IDs for collisions in your account and set provider spending limits. The Worker limits are approximate and enforced per Cloudflare location.
+
+## Important launch notes
+
+- Revoke any Gemini provider keys still active from older revisions of `src/api.js` and `src/alwaysking.txt`. Replace the keys in Cloudflare Worker secrets and review recent Gemini usage.
+- Never commit `.env`, `.dev.vars`, or provider keys to source control
+- Keep API keys in Cloudflare secrets or the proper provider consoles, not in frontend code
+- Validate Firebase auth, Firestore rules, Supabase policies, and Cloudflare origin allowlists before public launch

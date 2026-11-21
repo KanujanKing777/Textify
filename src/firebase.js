@@ -1,23 +1,23 @@
-import { getApp, getApps, initializeApp } from 'firebase/app';
+import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
+
 const firebaseConfig = {
-  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
-  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID || 'letstypifythecontent',
-  appId: process.env.REACT_APP_FIREBASE_APP_ID,
+  apiKey: import.meta.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: import.meta.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.REACT_APP_FIREBASE_PROJECT_ID,
+  appId: import.meta.env.REACT_APP_FIREBASE_APP_ID,
 };
 
-const missingConfig = ['apiKey', 'authDomain', 'appId']
-  .filter((key) => !firebaseConfig[key]);
+const missingConfig = Object.keys(firebaseConfig)
+  .filter((key) => !firebaseConfig[key]?.trim());
 
 export const firebaseConfigError = missingConfig.length
   ? `Missing Firebase web app configuration: ${missingConfig.join(', ')}.`
   : '';
 
-export const auth = firebaseConfigError
-  ? null
-  : getAuth(getApps().length ? getApp() : initializeApp(firebaseConfig));
+const app = firebaseConfigError ? null : initializeApp(firebaseConfig, 'textify');
 
-export const db = firebaseConfigError ? null : getFirestore(getApp());
+export const auth = app ? getAuth(app) : null;
+export const db = app ? getFirestore(app) : null;

@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import './LandingPage.css';
 
-const logoUrl = `${process.env.PUBLIC_URL}/favicon.png`;
+const logoUrl = `${import.meta.env.BASE_URL}favicon.png`;
 
 const features = [
   {

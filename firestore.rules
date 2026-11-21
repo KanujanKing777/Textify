@@ -45,7 +45,8 @@ service cloud.firestore {
         && request.resource.data.mode in ['Blog', 'Text', 'Image']
         && request.resource.data.action is string
         && request.resource.data.input is map
-        && validOutput(request.resource.data.output);
+        && validOutput(request.resource.data.output)
+        && request.resource.data.createdAt == request.time;
 
       allow update: if isOwner()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['output'])

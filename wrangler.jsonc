@@ -3,8 +3,12 @@
   "name": "textify-api",
   "main": "workers/api/index.js",
   "compatibility_date": "2026-11-02",
+  "ratelimits": [
+    { "name": "IP_RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 180, "period": 60 } },
+    { "name": "USER_RATE_LIMITER", "namespace_id": "1002", "simple": { "limit": 45, "period": 60 } }
+  ],
   "vars": {
     "FIREBASE_PROJECT_ID": "letstypifythecontent",
-    "ALLOWED_ORIGINS": "http://localhost:3000,https://letstypifythecontent.web.app,https://letstypifythecontent.firebaseapp.com"
+    "ALLOWED_ORIGINS": "https://letstypifythecontent.web.app,https://letstypifythecontent.firebaseapp.com"
   }
 }

@@ -34,7 +34,7 @@ function ChatHistoryPanel({
       <aside className={`chat-history${isOpen ? ' is-open' : ''}`} aria-label="Chat history">
         <div className="chat-history-top">
           <a className="chat-history-brand" href="#top" onClick={onClose}>
-            <img className="chat-history-mark" src={`${process.env.PUBLIC_URL}/favicon.png`} alt="" />
+            <img className="chat-history-mark" src={`${import.meta.env.BASE_URL}favicon.png`} alt="" />
             <span>Textify</span>
           </a>
           <button

@@ -1,0 +1,187 @@
+Textify is an AI-powered creative content studio that turns a simple idea into polished written content and visuals. It is built as a React frontend plus a Cloudflare Worker backend, and it focuses on three main creative formats: Blog, Story, and Comic. The product is designed to help a user go from initial concept to final output without switching between separate tools for writing and image creation.
+
+Project purpose
+- Generate blog articles from a topic or idea
+- Expand a prompt into a full story with themes and narrative structure
+- Create comic-style outputs with multiple scenes, character prompts, and panel images
+
+Overall product vision
+The app presents itself as a single creative studio: one place to write, generate, shape, and visualize content. The landing page emphasizes “one studio, three ways to create,” and the workspace lets the user move between content generation modes without leaving the same interface.
+
+Tech stack
+Frontend:
+- React (Create React App setup)
+- JavaScript / JSX
+- CSS styling
+- Lucide icons for UI controls
+
+Authentication / app config:
+- Firebase Authentication
+- Firebase Firestore for storing per-user generation history
+
+Backend:
+- Cloudflare Worker running at workers/api/index.js
+- Uses secure JWT verification against Firebase tokens before allowing requests
+
+Storage:
+- Supabase Storage (public bucket named textifybucket)
+- Used to store generated images and keep public URLs for history entries
+
+AI providers:
+- Google Gemini for text generation
+- Pollinations for image generation
+- Pexels API support is included for video search, though it is not the main user flow in the UI
+
+Main app structure
+- src/App.js: app-level auth gate and landing page/router-like control
+- src/LandingPage.js: public marketing/landing screen with account CTA
+- src/AuthScreen.js: email/password and Google sign-in
+- src/Home.js: main creative workspace with all generation modes and history features
+- src/api.js: frontend API wrapper that attaches Firebase ID tokens to requests
+- src/apiClient.js: base API URL and request helpers
+- src/chatHistory.js: Firestore-backed history subscription and save/update functions
+- src/storage.js: uploads generated images to Supabase
+- src/utils/*: helper logic for blog formatting, image generation/display, and text copying
+- workers/api/index.js: backend routes and AI orchestration
+
+User experience and flow
+1. User sees a landing page when not authenticated.
+2. User signs in via email/password or Google sign-in.
+3. The app loads the main workspace after Firebase auth is ready.
+4. User selects a generation mode:
+   - Blog
+   - Story
+   - Comic
+   - Text generation/formatting
+   - Image generation
+5. Output appears in the workspace and can be copied, read aloud, opened in a new tab, downloaded, or saved into history.
+6. Signed-in users can reopen previous generations from the history panel and inspect prior prompts and results.
+
+Core features
+1. Blog generation
+The app can generate a blog post from a topic. The backend prompts Gemini to create well-structured content with introduction, body, and conclusion. For blog content, it also creates image prompts and captions, inserts placeholders in the article for image sections, and returns structured JSON that the frontend formats into readable content.
+
+Supported blog settings:
+- Topic or main idea input
+- Output length: Short, Medium, Long, Detailed
+- Style: Informative, Casual, Professional, Creative, Educational
+- Format selection: Blog, Story, Comic
+
+2. Story generation
+The app can generate story content around a chosen theme. Story generation uses a narrative structure with natural prose and optional chapter headings. The backend pushes the story to a storybook format and generates image prompts in between chapter or scene transitions.
+
+Story-specific controls:
+- Theme selection
+- Custom theme support
+- Multi-theme combinations
+- Storybook-style chapter layout
+- Story-specific visual consistency across scenes
+
+3. Comic generation
+This is one of the most advanced parts of the app. For comic mode, the backend instructs Gemini to generate a plan and exactly N scenes, then converts each scene into a visual prompt. It ensures that scenes are unique, have a consistent art direction, keep recurring characters visually consistent, and use text bubbles or narration in a constrained, simplified way for readability.
+
+Comic capabilities include:
+- Topic + theme required
+- Configurable image count (4, 6, 8, 12, 16, or custom 1–32)
+- Each panel is generated as a separate image prompt
+- Different shots, settings, and story beats per panel
+- Visual prompt guidance for characters, environment, and art direction
+- Multi-panel gallery view
+- Fullscreen comic viewer with next/previous panel navigation
+- Escape key and keyboard navigation support
+
+4. Text generation and formatting
+The app can generate and rewrite text for different channels and tones. This is the simplest mode, separate from blog/story/comic creation.
+
+Available controls:
+- Platform: WhatsApp, Discord, Instagram, Twitter
+- Tone: Casual, Formal, Cool
+- Include emojis: Yes or No
+- Length: Normal, Short, Long
+- Modify existing text or generate entirely new text from a prompt
+
+5. Image generation
+The app can generate standalone images from a text prompt using Pollinations. Image generation is connected to a selected model list:
+- zimage
+- flux
+- turbo
+- gptimage
+- kontext
+- seedream
+- seedream-pro
+- nanobanana
+- nanobanana-pro
+
+The generated image appears in the UI and can be downloaded. The system also uploads generated images to Supabase and saves public URLs into history.
+
+6. Read-aloud and copy features
+The workspace includes utilities to:
+- Copy generated text to the clipboard
+- Read output aloud using the browser speech synthesis API
+- Pause/resume reading
+- Open generated blog content in a new tab
+- Convert generated content to PDF via html2pdf
+- Download generated images and blog images
+
+7. History and saved creative work
+Textify supports a persistent history feature tied to each authenticated user.
+
+History includes:
+- Saved generations by user
+- Metadata such as title, mode, action, input, and output
+- Output text and generated images
+- Ability to reopen previous generations in read-only format
+- Access to saved details such as prompt, topic, theme, image count, platform, and model
+
+This is implemented through Firebase Firestore under users/{uid}/history.
+
+8. Image storage and retrieval
+Generated images are uploaded to Supabase Storage using the public bucket textifybucket. This keeps references persistent and allows the app to reconnect saved entries to the actual image files in history.
+
+9. Security and auth layer
+The Cloudflare API verifies Firebase-issued JWTs before allowing any request. It checks:
+- Signature validity
+- Firebase project audience and issuer
+- Expiry, issue time, and auth time
+- Google public key rotation via Firebase JWKS
+
+The worker also enforces CORS allowlists using the ALLOWED_ORIGINS environment variable, and returns 403 when disallowed origins are used.
+
+10. Producing content with structured JSON
+A notable architectural detail is that the worker uses Gemini to produce structured JSON in several generation flows. The app then parses that JSON and converts it into UI-friendly headings, paragraphs, panels, captions, or prompts. This is especially important for:
+- Blog section generation
+- Story chapter and image planning
+- Comic panel generation with consistent visual guidance
+
+What the app can do in practice
+At a high level, Textify can:
+- Turn a topic into a complete article
+- Turn a story idea into a themed narrative with chapters and image prompts
+- Turn a comic idea into a sequence of visual panels with consistent characters and settings
+- Produce social copy in a chosen tone and platform style
+- Generate custom artwork from text prompts
+- Keep user projects organized through per-user history
+- Reuse saved work later
+- Present output cleanly with editorial formatting, cards, and a creative studio layout
+
+Potential future/expanded capabilities implied by the code
+The app already contains several hints about what it could become or expand into:
+- Video generation/search integration (Pexels API route is included)
+- More content types beyond blog/story/comic
+- Fine-grained content templates for marketing, ad copy, social campaigns, and landing pages
+- More advanced collaborative or multi-user workflows
+- Better annotation and editing of generated assets before finalizing them
+- Multi-output generation with selectable variants or multiple art styles
+- More export options such as PDF, DOCX, and shareable links
+
+Important implementation details
+- The frontend requires the environment variables defined in .env.example.
+- The backend requires secrets in Cloudflare workers (GEMINI_API_KEY, POLLINATIONS_API_KEY, PEXELS_API_KEY).
+- Firebase configuration must be set up at the frontend and project level for auth and Firestore.
+- Supabase must have a publicly accessible bucket and the Salesforce/Storage policies should be configured for generated image uploads.
+- The app is designed for authenticated users; the worker rejects requests without a valid Firebase token.
+
+Summary
+Textify is a creative AI studio for writing and image generation. It supports blogs, stories, comics, marketing/social copy, and image prompts, all inside a single interface. The backend is powered by Gemini and Pollinations, while Firebase and Supabase provide authentication, saved history, and image storage. The product is clearly intended as an all-in-one tool for creators who want to turn an idea into content quickly and keep their results organized.
+
+In short: this app is a combined AI writing and visual generation platform with authenticated user history, creative output modes, and a backend designed to orchestrate content generation and cloud storage securely.

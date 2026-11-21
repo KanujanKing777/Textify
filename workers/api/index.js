@@ -5,6 +5,12 @@ const FIREBASE_JWKS_URL = 'https://www.googleapis.com/service_accounts/v1/jwk/se
 
 let cachedJwks;
 let jwksExpiry = 0;
+const MAX_BODY_BYTES = 32 * 1024;
+const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/avif']);
+const IMAGE_MODELS = new Set([
+  'zimage', 'flux', 'turbo', 'gptimage', 'kontext', 'seedream',
+  'seedream-pro', 'nanobanana', 'nanobanana-pro',
+]);
 
 export default {
   async fetch(request, env) {
@@ -40,20 +46,17 @@ export default {
       '/api/image/generate': generateImage,
       '/api/video/search': searchVideos,
     };
-    const handler = handlers[path];
+    const handler = Object.hasOwn(handlers, path) ? handlers[path] : undefined;
 
     if (request.method !== 'POST' || !handler) {
       return jsonResponse({ error: 'Not found.' }, 404, corsHeaders);
     }
 
     try {
-      await verifyFirebaseToken(request, env);
-      let body;
-      try {
-        body = await request.json();
-      } catch {
-        throw httpError('Request body must be valid JSON.', 400);
-      }
+      await enforceLimit(env.IP_RATE_LIMITER, request.headers.get('CF-Connecting-IP') || 'unknown');
+      const uid = await verifyFirebaseToken(request, env);
+      await enforceLimit(env.USER_RATE_LIMITER, uid);
+      const body = await readJsonBody(request);
       if (!body || typeof body !== 'object' || Array.isArray(body)) {
         throw httpError('Request body must be a JSON object.', 400);
       }
@@ -63,11 +66,7 @@ export default {
         : jsonResponse(result, 200, corsHeaders);
     } catch (error) {
       const status = error.status || 500;
-      console.error('API request failed', {
-        path,
-        status,
-        message: error instanceof Error ? error.message : 'Unknown error',
-      });
+      if (status >= 500) console.error('API request failed', { path, status, error: error.name });
       return jsonResponse(
         { error: status < 500 ? error.message : 'The requested processing failed.' },
         status,
@@ -76,6 +75,46 @@ export default {
     }
   },
 };
+
+async function enforceLimit(limiter, key) {
+  if (!(await limiter.limit({ key })).success) {
+    throw httpError('Too many requests. Try again shortly.', 429);
+  }
+}
+
+async function readJsonBody(request) {
+  const mediaType = request.headers.get('Content-Type')?.split(';')[0].trim().toLowerCase();
+  if (mediaType !== 'application/json') {
+    throw httpError('Content-Type must be application/json.', 415);
+  }
+  if (Number(request.headers.get('Content-Length')) > MAX_BODY_BYTES) {
+    throw httpError('Request body is too large.', 413);
+  }
+  if (!request.body) throw httpError('Request body is required.', 400);
+
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder();
+  let bytes = 0;
+  let json = '';
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > MAX_BODY_BYTES) {
+        await reader.cancel();
+        throw httpError('Request body is too large.', 413);
+      }
+      json += decoder.decode(value, { stream: true });
+    }
+    return JSON.parse(json + decoder.decode());
+  } catch (error) {
+    if (error.status) throw error;
+    throw httpError('Request body must be valid JSON.', 400);
+  } finally {
+    reader.releaseLock();
+  }
+}
 
 async function formatText(body, env) {
   const { text, platform, tone, withe, length } = body;
@@ -292,13 +331,17 @@ Please return only the raw JSON as the output`;
 
 async function generateImage(body, env) {
   requireText(body.prompt, 'prompt');
+  const prompt = body.prompt.trim();
+  if (prompt === '.' || prompt === '..') throw httpError('Invalid image prompt.', 400);
+  const model = body.model ?? 'zimage';
+  if (!IMAGE_MODELS.has(model)) throw httpError('Unsupported image model.', 400);
   const apiKey = env.POLLINATIONS_API_KEY?.trim();
   if (!apiKey) {
     throw new Error('Image generation is not configured.');
   }
 
   const params = new URLSearchParams({
-    model: body.model || 'zimage',
+    model,
     width: '1024',
     height: '1024',
     seed: '0',
@@ -307,26 +350,33 @@ async function generateImage(body, env) {
     private: 'true',
     nologo: 'false',
     nofeed: 'false',
-    safe: 'false',
+    safe: 'true',
     quality: 'medium',
     image: '',
     transparent: 'false',
     guidance_scale: '1',
   });
   const upstream = await fetch(
-    `${POLLINATIONS_IMAGE_URL}${encodeURIComponent(body.prompt.trim())}?${params}`,
+    `${POLLINATIONS_IMAGE_URL}${encodeURIComponent(prompt)}?${params}`,
     {
       headers: { Authorization: `Bearer ${apiKey}` },
+      redirect: 'error',
+      signal: AbortSignal.timeout(60_000),
     },
   );
   if (!upstream.ok) {
-    throw await providerError(upstream, 'Image', apiKey);
+    throw new Error('Image provider request failed.');
   }
 
+  const contentType = upstream.headers.get('Content-Type')?.split(';')[0].trim().toLowerCase();
+  if (!IMAGE_TYPES.has(contentType)) {
+    await upstream.body?.cancel();
+    throw new Error('Image provider returned an unsupported media type.');
+  }
   return new Response(upstream.body, {
     status: 200,
     headers: {
-      'Content-Type': upstream.headers.get('Content-Type') || 'image/png',
+      'Content-Type': contentType,
       'Cache-Control': 'private, no-store',
     },
   });
@@ -344,6 +394,8 @@ async function searchVideos(body, env) {
   url.searchParams.set('orientation', 'landscape');
   const response = await fetch(url, {
     headers: { Authorization: env.PEXELS_API_KEY },
+    redirect: 'error',
+    signal: AbortSignal.timeout(15_000),
   });
   if (!response.ok) {
     throw new Error('Video provider request failed.');
@@ -359,10 +411,12 @@ async function generateGemini(prompt, env, generationConfig) {
   }
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+      redirect: 'error',
+      signal: AbortSignal.timeout(60_000),
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         ...(generationConfig ? { generationConfig } : {}),
@@ -370,7 +424,7 @@ async function generateGemini(prompt, env, generationConfig) {
     },
   );
   if (!response.ok) {
-    throw await providerError(response, 'Text', apiKey);
+    throw new Error('Text provider request failed.');
   }
 
   const result = await response.json();
@@ -383,30 +437,14 @@ async function generateGemini(prompt, env, generationConfig) {
   return text;
 }
 
-async function providerError(response, provider, apiKey) {
-  let detail = '';
-  try {
-    const body = await response.json();
-    const error = body?.error;
-    detail = typeof error === 'string' ? error : error?.message || body?.message || '';
-  } catch {
-    // Some upstream errors do not include a JSON response body.
-  }
-  if (detail) {
-    detail = detail.split(apiKey).join('[redacted]');
-  }
-  return new Error(
-    `${provider} provider request failed with status ${response.status}${detail ? `: ${detail}` : '.'}`,
-  );
-}
-
 async function verifyFirebaseToken(request, env) {
   const projectId = env.FIREBASE_PROJECT_ID;
   if (!projectId) {
     throw new Error('Authentication is not configured.');
   }
   const authorization = request.headers.get('Authorization') || '';
-  const match = authorization.match(/^Bearer (.+)$/);
+  const match = authorization.length <= 8192
+    && authorization.match(/^Bearer ([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/i);
   if (!match) {
     throw httpError('Authentication is required.', 401);
   }
@@ -445,6 +483,7 @@ async function verifyFirebaseToken(request, env) {
   const now = Math.floor(Date.now() / 1000);
   if (
     header.alg !== 'RS256'
+    || typeof header.kid !== 'string'
     || !header.kid
     || payload.aud !== projectId
     || payload.iss !== `https://securetoken.google.com/${projectId}`
@@ -463,25 +502,20 @@ async function verifyFirebaseToken(request, env) {
 
   const jwks = await getFirebaseJwks();
   const jwk = jwks.keys.find((key) => key.kid === header.kid);
-  if (!jwk) {
-    cachedJwks = undefined;
-    const refreshedJwks = await getFirebaseJwks(true);
-    const refreshedKey = refreshedJwks.keys.find((key) => key.kid === header.kid);
-    if (!refreshedKey || !(await verifySignature(refreshedKey, signature, `${encodedHeader}.${encodedPayload}`))) {
-      throw httpError('Invalid authentication token.', 401);
-    }
-    return;
-  }
-  if (!(await verifySignature(jwk, signature, `${encodedHeader}.${encodedPayload}`))) {
+  if (!jwk || !(await verifySignature(jwk, signature, `${encodedHeader}.${encodedPayload}`))) {
     throw httpError('Invalid authentication token.', 401);
   }
+  return payload.sub;
 }
 
-async function getFirebaseJwks(forceRefresh = false) {
-  if (!forceRefresh && cachedJwks && Date.now() < jwksExpiry) {
+async function getFirebaseJwks() {
+  if (cachedJwks && Date.now() < jwksExpiry) {
     return cachedJwks;
   }
-  const response = await fetch(FIREBASE_JWKS_URL);
+  const response = await fetch(FIREBASE_JWKS_URL, {
+    redirect: 'error',
+    signal: AbortSignal.timeout(5_000),
+  });
   if (!response.ok) {
     throw new Error('Unable to verify authentication token.');
   }
@@ -533,12 +567,18 @@ function httpError(message, status) {
 function jsonResponse(body, status = 200, headers = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', ...headers },
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+      ...headers,
+    },
   });
 }
 
 function addCorsHeaders(response, corsHeaders) {
   const headers = new Headers(response.headers);
+  headers.set('X-Content-Type-Options', 'nosniff');
   for (const [name, value] of Object.entries(corsHeaders)) {
     headers.set(name, value);
   }

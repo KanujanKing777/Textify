@@ -13,7 +13,7 @@ import {
   subscribeToChatHistory,
   updateChatHistoryOutput,
 } from './chatHistory';
-import { uploadGeneratedImage } from './storage';
+import { getSavedImages, uploadGeneratedImage } from './storage';
 import ChatHistoryPanel from './ChatHistoryPanel';
 
 const formattedBlogOutputFormats = ['Blog', 'Story', 'Comic'];
@@ -97,6 +97,7 @@ function Home() {
   const [historySaveStatus, setHistorySaveStatus] = useState('');
   const [selectedHistoryId, setSelectedHistoryId] = useState(null);
   const [restoredHistoryEntry, setRestoredHistoryEntry] = useState(null);
+  const [signedHistoryImages, setSignedHistoryImages] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
 
   useEffect(() => {
@@ -124,6 +125,28 @@ function Home() {
       },
     );
   }, []);
+
+  useEffect(() => {
+    const entry = restoredHistoryEntry;
+    const images = entry?.output?.imageUrls;
+    if (!Array.isArray(images) || images.length === 0) return undefined;
+
+    let active = true;
+    const refresh = async () => {
+      try {
+        const signed = await getSavedImages(images);
+        if (active) setSignedHistoryImages({ entry, images: signed });
+      } catch {
+        if (active) setSignedHistoryImages({ entry, images: [] });
+      }
+    };
+    refresh();
+    const interval = setInterval(refresh, 8 * 60 * 1000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [restoredHistoryEntry]);
 
   // Update blog content loaded state when output or blogOutputFormat changes
   useEffect(() => {
@@ -552,14 +575,22 @@ function Home() {
   const handleOpenGeneratedContentInNewTab = () => {
     const headingTitle = document.querySelector('#blogcontent h1')?.textContent?.trim();
     const title = headingTitle || blogTopic.trim() || `Generated ${blogOutputFormat}`;
-    const faviconPath = `${(process.env.PUBLIC_URL || '').replace(/\/$/, '')}/favicon.png`;
+    const faviconPath = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/favicon.png`;
     const faviconHref = new URL(faviconPath, window.location.href).href;
     handleOpenInNewTab({ title, faviconHref });
   };
 
   const renderHistoryDetails = () => {
-    const entry = restoredHistoryEntry;
-    if (!entry) return null;
+    if (!restoredHistoryEntry) return null;
+    const images = signedHistoryImages?.entry === restoredHistoryEntry ? signedHistoryImages.images : [];
+    const entry = {
+      ...restoredHistoryEntry,
+      output: typeof restoredHistoryEntry.output === 'string' ? restoredHistoryEntry.output
+        : { ...restoredHistoryEntry.output, imageUrls: images },
+    };
+    const savedImages = restoredHistoryEntry.output?.imageUrls;
+    const loadingImages = Array.isArray(savedImages) && savedImages.some(Boolean)
+      && signedHistoryImages?.entry !== restoredHistoryEntry;
 
     const input = entry.input || {};
     const savedOutput = typeof entry.output === 'string' ? entry.output : entry.output?.text || '';
@@ -610,14 +641,15 @@ function Home() {
 
         <div className="history-result">
           <h2>Generated output</h2>
+          {loadingImages && <p role="status">Loading saved images…</p>}
           {entry.mode === 'Image' ? (
-            imageUrls.length ? (
+            imageUrls.some(Boolean) ? (
               <div className="history-saved-images">
                 {imageUrls.filter(Boolean).map((image, index) => (
                   <img key={image.path || image.url} src={image.url} alt={`Generated artwork ${index + 1}`} />
                 ))}
               </div>
-            ) : (
+            ) : !loadingImages && (
               <p className="history-output-note">
                 The generated image is not available in this history entry.
               </p>
@@ -632,7 +664,7 @@ function Home() {
               {savedOutput || 'No text output was saved for this generation.'}
             </p>
           )}
-          {entry.mode === 'Blog' && imagePrompts.length > 0 && imageUrls.every((image) => !image) && (
+          {entry.mode === 'Blog' && !loadingImages && imagePrompts.length > 0 && imageUrls.every((image) => !image) && (
             <p className="history-output-note">Generated images could not be saved to storage.</p>
           )}
         </div>
